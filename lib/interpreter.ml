@@ -54,11 +54,12 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
       let env = env |> EnvironmentMap.add id bound in
         interp body env h
 | Id(id) -> (env |> EnvironmentMap.find id, h)
-| Cond(cond, then_body, else_body) -> let (cond, h) = interp cond env h in
-    (match cond with
-    | Bool(b) -> if b then interp then_body env h else interp else_body env h
-    | _ -> raise (InterpreterException "Cond requires a bool!")
-    )
+| Cond(cond, then_body, else_body) ->
+    let (cond, h) = interp cond env h in
+      (match cond with
+      | Bool(b) -> if b then interp then_body env h else interp else_body env h
+      | _ -> raise (InterpreterException "Cond requires a bool!")
+      )
 | BinOp(op, lhs, rhs) ->
     let (lhs, h) = interp lhs env h in
       let (rhs, h) = interp rhs env h in
