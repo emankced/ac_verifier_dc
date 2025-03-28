@@ -82,10 +82,20 @@ let mget (loc: int) (h: heap) : values =
             List.nth values_list offset
 
 
-let rec replace_nth (l: 'a list) (v: 'a) (n: int) : 'a list =
+let rec replace_nth (l: values list) (v: values) (n: int) : values list =
   match l with
   | [] -> []
-  | (x :: xs) -> if n == 0 then v :: xs else x :: replace_nth xs v (n-1)
+  | (x :: xs) ->
+      if n == 0 then
+        (match (x, v) with
+        | (Num(_), Num(_)) -> v :: xs
+        | (Loc(_), Loc(_)) -> v :: xs
+        | (Bool(_), Bool(_)) -> v :: xs
+        | (Unit, Unit) -> v :: xs
+        | _ -> raise (InterpreterException "mset cannot change data type of field!")
+        )
+      else
+        x :: replace_nth xs v (n-1)
 
 let mset (loc: int) (v: values) (h: heap) : heap =
   if HeapMap.is_empty h then
