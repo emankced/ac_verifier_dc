@@ -1,4 +1,5 @@
-let prog: Appendix_c_verifier.Interpreter.expression = Let("x", Bool(false), Cond(Id("x"), Num(42), Num(1337)))
+(** let prog: Appendix_c_verifier.Interpreter.expression = Let("x", Bool(false), Cond(Id("x"), Num(42), Num(1337))) *)
+let prog: Appendix_c_verifier.Interpreter.expression = Let("x", Malloc([Num(-6); Num(5)]), BinOp(Add, Mget(Id("x")), Mget(BinOp(Add, Id("x"), Loc(1)))))
 let env: Appendix_c_verifier.Interpreter.environment = Appendix_c_verifier.Interpreter.EnvironmentMap.empty
 let h: Appendix_c_verifier.Interpreter.heap = Appendix_c_verifier.Interpreter.HeapMap.empty
 
