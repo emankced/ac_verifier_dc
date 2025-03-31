@@ -175,12 +175,12 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
 | Seq(expr0, expr1) -> let (_, h) = interp expr0 env h in interp expr1 env h
 | Malloc(exprs) ->
     let (values_list, h) =
-      List.fold_left
-        (fun (values_list, h) expr ->
+      List.fold_right
+        (fun expr (values_list, h) ->
           let (v, h) = interp expr env h in
             (v :: values_list, h))
+        exprs
         ([], h)
-        (List.rev exprs)
       in
         let (loc, h) = malloc values_list h in
           (Loc(loc), h)
