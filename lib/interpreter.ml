@@ -1,14 +1,18 @@
+(** Map that holds the environment store *)
 module EnvironmentMap = Map.Make(String)
+
+(** Map that holds the heap store *)
 module HeapMap = Map.Make(Int)
 
+(** Return values of the interpreter *)
 type values =
 | Loc of int
 | Num of int
 | Bool of bool
 | Unit
+(* closures *)
 
-(** HObjs are still TODO *)
-
+(** Binary operators *)
 type binop =
 | Add
 | Sub
@@ -21,6 +25,7 @@ type binop =
 | Ge
 | Gt
 
+(** Expressions as AST *)
 type expression =
 | Loc of int
 | Num of int
@@ -35,18 +40,21 @@ type expression =
 | Mset of expression * expression
 | Mget of expression
 | Mfree of expression
+(* while do *)
+(* for in to do *)
+(* functions *)
+(* recursive let *)
 
-(** HObjs are still TODO *)
-(** while do *)
-(** for in to do *)
-(** deref *)
-(** setref *)
-(** HCmds like malloc and free *)
-
+(** Type of the environment *)
 type environment = (values EnvironmentMap.t)
+
+(** Type of the heap *)
 type heap = ((values list) HeapMap.t)
+
+(** Exception used by the interpreter *)
 exception InterpreterException of string
 
+(** Memory allocation on the heap *)
 let malloc (init_values: values list) (h: heap) : int * heap =
   if List.length init_values == 0 then
     raise (InterpreterException "malloc cannot allocate nothing")
@@ -62,8 +70,10 @@ let malloc (init_values: values list) (h: heap) : int * heap =
     in
       (max_available_loc, h |> HeapMap.add max_available_loc init_values)
 
+(** Memory deallocation on the heap *)
 let mfree (loc: int) (h: heap) : heap = h |> HeapMap.remove loc
 
+(** Memory featching from the heap *)
 let mget (loc: int) (h: heap) : values =
   if HeapMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
@@ -81,7 +91,7 @@ let mget (loc: int) (h: heap) : values =
           else
             List.nth values_list offset
 
-
+(** Replace nth element if the type matches *)
 let rec replace_nth (l: values list) (v: values) (n: int) : values list =
   match l with
   | [] -> []
@@ -90,13 +100,14 @@ let rec replace_nth (l: values list) (v: values) (n: int) : values list =
         (match (x, v) with
         | (Num(_), Num(_)) -> v :: xs
         | (Loc(_), Loc(_)) -> v :: xs
-        | (Bool(_), Bool(_)) -> v :: xs
+        | (Bool(_), Bool(_)) -> v :: xs (* should unit even be allowed on heap? it doesn't hold a value and data types cannot be changed afeterwards... *)
         | (Unit, Unit) -> v :: xs
         | _ -> raise (InterpreterException "mset cannot change data type of field!")
         )
       else
         x :: replace_nth xs v (n-1)
 
+(** Memory mutation on the heap *)
 let mset (loc: int) (v: values) (h: heap) : heap =
   if HeapMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
@@ -115,6 +126,7 @@ let mset (loc: int) (v: values) (h: heap) : heap =
             let values_list = replace_nth values_list v offset in
               h |> HeapMap.add hloc values_list
 
+(** Evaluates expressions based on an environment and heap *)
 let rec interp (expr: expression) (env: environment) (h: heap) : values * heap = match expr with
 | Loc(l) -> (Loc(l), h)
 | Num(n) -> (Num(n), h)
@@ -149,6 +161,7 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
         | (Ne, Bool(lhs), Bool(rhs)) -> (Bool(lhs != rhs), h)
         | (Eq, Loc(lhs), Loc(rhs)) -> (Bool(lhs == rhs), h)
         | (Ne, Loc(lhs), Loc(rhs)) -> (Bool(lhs != rhs), h)
+        (* should unit get a comparison definition? *)
         | (Le, Num(lhs), Num(rhs)) -> (Bool(lhs <= rhs), h)
         | (Lt, Num(lhs), Num(rhs)) -> (Bool(lhs < rhs), h)
         | (Ge, Num(lhs), Num(rhs)) -> (Bool(lhs >= rhs), h)
