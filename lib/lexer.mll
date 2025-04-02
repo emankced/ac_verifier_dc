@@ -9,4 +9,8 @@ rule read =
   parse
   | white { read lexbuf }
   | num { NUM (int_of_string (Lexing.lexeme lexbuf))}
+  | '+' { ADD }
+  | '-' { SUB }
+  | '*' { MUL }
+  | '/' { DIV }
   | eof { EOF }
