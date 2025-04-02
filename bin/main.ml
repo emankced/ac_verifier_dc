@@ -20,7 +20,7 @@ let parse (s : string) : expression =
       ast
 
 let () =
-  let prog = parse "15 + 9 - 8 / 4 + 1" in
+  let prog = parse "-15 + (-9 - 8) / 4 + 1" in
     let (res, _) = interp prog env h in
       match res with
       | Loc(l) -> print_string "Loc("; print_int l; print_endline ")"

@@ -13,4 +13,6 @@ rule read =
   | '-' { SUB }
   | '*' { MUL }
   | '/' { DIV }
+  | '(' { LPARAN }
+  | ')' { RPARAN }
   | eof { EOF }
