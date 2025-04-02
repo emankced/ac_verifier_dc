@@ -41,7 +41,7 @@ type expression =
 | Mget of expression
 | Mfree of expression
 | While of expression * expression
-(* for in to do *)
+| For of string * expression * expression * expression
 (* functions *)
 (* recursive let *)
 
@@ -214,3 +214,18 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
         else (Unit, h)
     | _ -> raise (InterpreterException "While requires a bool!")
     )
+| For(id, start, end_, body) ->
+  let (start, h) = interp start env h in
+    let (end_, h) = interp end_ env h in
+      let env = env |> EnvironmentMap.add id start in
+        (match (start, end_) with
+        | (Num(start), Num(end_)) ->
+          let (_, h) = interp body env h in
+            if start == end_ then
+              (Unit, h)
+            else if start < end_ then
+              interp (For(id, Num(start+1), Num(end_), body)) env h
+            else
+              interp (For(id, Num(start-1), Num(end_), body)) env h
+        | _ -> raise (InterpreterException "For requires numbers for iterating!")
+        )

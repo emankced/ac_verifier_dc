@@ -39,3 +39,10 @@ let%test "While loop" =
       match HeapMap.find_first (fun _ -> true) h with
       | (_, [Num(5)]) -> true
       | _ -> false
+
+let%test "For loop" =
+  let prog = Let("sum", Malloc([Num(0)]), For("i", Num(1), Num(5), Mset(Id("sum"), BinOp(Add, Mget(Id("sum")), Id("i"))))) in
+    let (_, h) = interp prog env h in
+      match HeapMap.find_first (fun _ -> true) h with
+      | (_, [Num(15)]) -> true
+      | _ -> false
