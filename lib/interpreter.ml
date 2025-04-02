@@ -40,7 +40,7 @@ type expression =
 | Mset of expression * expression
 | Mget of expression
 | Mfree of expression
-(* while do *)
+| While of expression * expression
 (* for in to do *)
 (* functions *)
 (* recursive let *)
@@ -204,3 +204,13 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
           (Unit, mset l expr h)
       | _ -> raise (InterpreterException "Mset requires a location!")
       )
+| While(condition, body) ->
+  let (condition, h) = interp condition env h in
+    (match condition with
+    | Bool(condition) ->
+      if condition
+        then let (_, h) = interp body env h in
+          interp expr env h
+        else (Unit, h)
+    | _ -> raise (InterpreterException "While requires a bool!")
+    )

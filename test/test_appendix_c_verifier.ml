@@ -32,3 +32,10 @@ let%test "Invalid heap access test" =
     with
       | InterpreterException _ -> true
       | _ -> false
+
+let%test "While loop" =
+  let prog = Let("c", Malloc([Num(0)]), While(BinOp(Lt, Mget(Id("c")), Num(5)), Mset(Id("c"), BinOp(Add, Mget(Id("c")), Num(1))))) in
+    let (_, h) = interp prog env h in
+      match HeapMap.find_first (fun _ -> true) h with
+      | (_, [Num(5)]) -> true
+      | _ -> false
