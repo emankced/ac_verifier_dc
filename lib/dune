@@ -1,2 +1,7 @@
 (library
  (name appendix_c_verifier))
+
+(menhir
+ (modules parser))
+
+(ocamllex lexer)

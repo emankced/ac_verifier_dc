@@ -13,3 +13,17 @@ let () =
     | Num(n) -> print_string "Num("; print_int n; print_endline ")"
     | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
     | Unit -> print_endline "Unit"
+
+let parse (s : string) : expression =
+  let lexbuf = Lexing.from_string s in
+    let ast = Appendix_c_verifier.Parser.prog Appendix_c_verifier.Lexer.read lexbuf in
+      ast
+
+let () =
+  let prog = parse "15" in
+    let (res, _) = interp prog env h in
+      match res with
+      | Loc(l) -> print_string "Loc("; print_int l; print_endline ")"
+      | Num(n) -> print_string "Num("; print_int n; print_endline ")"
+      | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
+      | Unit -> print_endline "Unit"
