@@ -34,11 +34,10 @@ open Interpreter
 %token EOF
 
 %right EQ NE
+%right LE LT GE GT
 
-%left ADD
-%left SUB
-%left MUL
-%left DIV
+%left ADD SUB
+%left MUL DIV
 
 %start <Interpreter.expression> prog
 %%
@@ -49,40 +48,31 @@ prog:
 ;
 
 command:
-| LET; id = ID; ASSIGN; value = bool_expr; IN; body = command { Let(id, value, body) }
-| IF; cond = bool_expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
-| e = bool_expr { e }
-;
-
-bool_expr:
-| TRUE { Bool(true) }
-| FALSE { Bool(false) }
-| lhs = bool_expr; EQ; rhs = bool_expr { BinOp(Eq, lhs, rhs) }
-| lhs = bool_expr; NE; rhs = bool_expr { BinOp(Ne, lhs, rhs) }
-| lhs = negative_expr; LE; rhs = negative_expr { BinOp(Le, lhs, rhs) }
-| lhs = negative_expr; LT; rhs = negative_expr { BinOp(Lt, lhs, rhs) }
-| lhs = negative_expr; GE; rhs = negative_expr { BinOp(Ge, lhs, rhs) }
-| lhs = negative_expr; GT; rhs = negative_expr { BinOp(Gt, lhs, rhs) }
-| LPARAN; e = bool_expr; RPARAN { e }
-| e = negative_expr { e }
-;
-
-negative_expr:
-| SUB; n = NUM { Num(-n) }
-| SUB; n = NUM; ADD; rhs = expr { BinOp(Add, Num(-n), rhs) }
-| SUB; n = NUM; SUB; rhs = expr { BinOp(Sub, Num(-n), rhs) }
-| SUB; n = NUM; MUL; rhs = expr { BinOp(Mul, Num(-n), rhs) }
-| SUB; n = NUM; DIV; rhs = expr { BinOp(Div, Num(-n), rhs) }
-| SUB; LPARAN; e = negative_expr; RPARAN { BinOp(Sub, Num(0), e) }
+| LET; id = ID; ASSIGN; value = expr; IN; body = command { Let(id, value, body) }
+| IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
 | e = expr { e }
 ;
 
 expr:
-| n = NUM { Num(n) }
+| t = term { t }
 | lhs = expr; ADD; rhs = expr { BinOp(Add, lhs, rhs) }
 | lhs = expr; SUB; rhs = expr { BinOp(Sub, lhs, rhs) }
 | lhs = expr; MUL; rhs = expr { BinOp(Mul, lhs, rhs) }
 | lhs = expr; DIV; rhs = expr { BinOp(Div, lhs, rhs) }
-| LPARAN; e = negative_expr; RPARAN { e }
+| lhs = expr; EQ; rhs = expr { BinOp(Eq, lhs, rhs) }
+| lhs = expr; NE; rhs = expr { BinOp(Ne, lhs, rhs) }
+| lhs = expr; LE; rhs = expr { BinOp(Le, lhs, rhs) }
+| lhs = expr; LT; rhs = expr { BinOp(Lt, lhs, rhs) }
+| lhs = expr; GE; rhs = expr { BinOp(Ge, lhs, rhs) }
+| lhs = expr; GT; rhs = expr { BinOp(Gt, lhs, rhs) }
+;
+
+term:
+| n = NUM { Num(n) }
+| SUB; n = NUM { Num(-n) }
+| TRUE { Bool(true) }
+| FALSE { Bool(false) }
+| LPARAN; e = expr; RPARAN { e }
+| SUB; LPARAN; e = expr; RPARAN { BinOp(Sub, Num(0), e) }
 | id = ID; { Id(id) }
 ;

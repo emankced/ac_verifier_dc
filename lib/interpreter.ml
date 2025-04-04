@@ -229,3 +229,34 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
               interp (For(id, Num(start-1), Num(end_), body)) env h
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
+
+let (==) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
+| (Num(lhs), Num(rhs)) -> lhs == rhs
+| (Loc(lhs), Loc(rhs)) -> lhs == rhs
+| (Bool(lhs), Bool(rhs)) -> lhs == rhs
+| _ -> false
+
+let (!=) (lhs: values) (rhs: values) : bool = not (lhs == rhs)
+
+let rec string_of_expression (expr: expression) : string = match expr with
+| Num(n) -> "Num(" ^ string_of_int n ^ ")"
+| Bool(b) -> "Bool(" ^ (if b then "true" else "false") ^ ")"
+| Loc(l) -> "Loc(" ^ string_of_int l ^ ")"
+| Unit -> "Unit"
+| BinOp(op, lhs, rhs) ->
+  let op = (match op with
+    | Add -> "Add"
+    | Sub -> "Sub"
+    | Mul -> "Mul"
+    | Div -> "Div"
+    | Eq -> "Eq"
+    | Ne -> "Ne"
+    | Le -> "Le"
+    | Lt -> "Lt"
+    | Ge -> "Ge"
+    | Gt -> "Gt"
+    )
+  in
+    "BinOp(" ^ op ^ ", " ^ (string_of_expression lhs) ^ ", " ^ (string_of_expression rhs) ^ ")"
+| Id(id) -> "Id(" ^ id ^ ")"
+| _ -> "unsupported"

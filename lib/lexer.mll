@@ -10,7 +10,6 @@ rule read =
   parse
   | white { read lexbuf }
   | num { NUM (int_of_string (Lexing.lexeme lexbuf))}
-  | id { ID (Lexing.lexeme lexbuf) }
   | "true" { TRUE }
   | "false" { FALSE }
   | '+' { ADD }
@@ -31,4 +30,5 @@ rule read =
   | "if" { IF }
   | "then" { THEN }
   | "else" { ELSE }
+  | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }

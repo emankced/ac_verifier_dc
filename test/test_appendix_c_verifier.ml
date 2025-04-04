@@ -1,4 +1,5 @@
 open Appendix_c_verifier.Interpreter
+open Appendix_c_verifier.Parse
 
 let env: environment = EnvironmentMap.empty
 let h: heap = HeapMap.empty
@@ -46,3 +47,42 @@ let%test "For loop" =
       match HeapMap.find_first (fun _ -> true) h with
       | (_, [Num(15)]) -> true
       | _ -> false
+
+let%test "Parse simple arithmetics" =
+  (let (v, _) = (interp (parse "1 + 5") env h) in v) == Num(6) &&
+  (let (v, _) = (interp (parse "1 - 5") env h) in v) == Num(-4) &&
+  (let (v, _) = (interp (parse "2 * 5") env h) in v) == Num(10) &&
+  (let (v, _) = (interp (parse "9 / 3") env h) in v) == Num(3) &&
+  (let (v, _) = (interp (parse "-1 + 5") env h) in v) == Num(4) &&
+  (let (v, _) = (interp (parse "-1 - 5") env h) in v) == Num(-6) &&
+  (let (v, _) = (interp (parse "-1 * 5") env h) in v) == Num(-5) &&
+  (let (v, _) = (interp (parse "(5 + 1) * 3") env h) in v) == Num(18) &&
+  (let (v, _) = (interp (parse "3 * (-5 + 1)") env h) in v) == Num(-12) &&
+  (let (v, _) = (interp (parse "(-1) - 1 - 1 - 1") env h) in v) == Num(-4) &&
+  (let (v, _) = (interp (parse "1 - 1 - 1") env h) in v) == Num(-1) &&
+  (let (v, _) = (interp (parse "3 + 5 * 7 + 2 / 1 * 3") env h) in v) == Num(44)
+
+let%test "Parse hard arithmetics" =
+  (let (v, _) = (interp (parse "-1 - 1 - 1 - 1") env h) in v) == Num(-4) &&
+  (let (v, _) = (interp (parse "20 / 4 / 2") env h) in v) == Num(2) &&
+  (let (v, _) = (interp (parse "20 / 2 - 2") env h) in v) == Num(8)
+
+let%test "Parse simple comparators" =
+  (let (v, _) = (interp (parse "-5 < 5") env h) in v) == Bool(true) &&
+  (let (v, _) = (interp (parse "5 < 5") env h) in v) == Bool(false) &&
+  (let (v, _) = (interp (parse "5 <= 5") env h) in v) == Bool(true) &&
+  (let (v, _) = (interp (parse "-5 > 5") env h) in v) == Bool(false) &&
+  (let (v, _) = (interp (parse "5 > 5") env h) in v) == Bool(false) &&
+  (let (v, _) = (interp (parse "5 >= 5") env h) in v) == Bool(true)
+
+let%test "Parse hard comparators" =
+  (let (v, _) = (interp (parse "true == false") env h) in v) == Bool(false) &&
+  (let (v, _) = (interp (parse "false == false") env h) in v) == Bool(true) &&
+  (let (v, _) = (interp (parse "5 <= 5 == (5 == 5)") env h) in v) == Bool(true) &&
+  (let (v, _) = (interp (parse "5 < 5 == (5 == 5)") env h) in v) == Bool(false)
+
+let%test "Parse cond" =
+  (let (v, _) = (interp (parse "let x := 5 in let y := 3 in let x := 10 in x + y") env h) in v) == Num(13)
+
+let%test "Parse let and cond" =
+  (let (v, _) = (interp (parse "let x := 5 in if x * 5 < 30 != true then 42 else 1337") env h) in v) == Num(1337)
