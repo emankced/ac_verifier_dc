@@ -4,7 +4,7 @@ open Parser
 
 let white = [' ' '\t' '\n']
 let num = ['0'-'9']+
-let id = ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9']*
+let id = ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9' '_']*
 
 rule read =
   parse
