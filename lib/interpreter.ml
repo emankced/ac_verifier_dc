@@ -238,14 +238,14 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
 
-let (==) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
+let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
 | (Loc(lhs), Loc(rhs)) -> lhs == rhs
 | (Bool(lhs), Bool(rhs)) -> lhs == rhs
 | (Unit, Unit) -> true
 | _ -> false
 
-let (!=) (lhs: values) (rhs: values) : bool = not (lhs == rhs)
+let (!==) (lhs: values) (rhs: values) : bool = not (lhs === rhs)
 
 let rec string_of_expression (expr: expression) : string = match expr with
 | Num(n) -> "Num(" ^ string_of_int n ^ ")"

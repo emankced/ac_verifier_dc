@@ -49,52 +49,52 @@ let%test "For loop" =
       | _ -> false
 
 let%test "Parse simple arithmetics" =
-  (let (v, _) = (interp (parse "1 + 5") env h) in v) == Num(6) &&
-  (let (v, _) = (interp (parse "1 - 5") env h) in v) == Num(-4) &&
-  (let (v, _) = (interp (parse "2 * 5") env h) in v) == Num(10) &&
-  (let (v, _) = (interp (parse "9 / 3") env h) in v) == Num(3) &&
-  (let (v, _) = (interp (parse "-1 + 5") env h) in v) == Num(4) &&
-  (let (v, _) = (interp (parse "-1 - 5") env h) in v) == Num(-6) &&
-  (let (v, _) = (interp (parse "-1 * 5") env h) in v) == Num(-5) &&
-  (let (v, _) = (interp (parse "(5 + 1) * 3") env h) in v) == Num(18) &&
-  (let (v, _) = (interp (parse "3 * (-5 + 1)") env h) in v) == Num(-12) &&
-  (let (v, _) = (interp (parse "(-1) - 1 - 1 - 1") env h) in v) == Num(-4) &&
-  (let (v, _) = (interp (parse "1 - 1 - 1") env h) in v) == Num(-1) &&
-  (let (v, _) = (interp (parse "3 + 5 * 7 + 2 / 1 * 3") env h) in v) == Num(44)
+  (let (v, _) = (interp (parse "1 + 5") env h) in v) === Num(6) &&
+  (let (v, _) = (interp (parse "1 - 5") env h) in v) === Num(-4) &&
+  (let (v, _) = (interp (parse "2 * 5") env h) in v) === Num(10) &&
+  (let (v, _) = (interp (parse "9 / 3") env h) in v) === Num(3) &&
+  (let (v, _) = (interp (parse "-1 + 5") env h) in v) === Num(4) &&
+  (let (v, _) = (interp (parse "-1 - 5") env h) in v) === Num(-6) &&
+  (let (v, _) = (interp (parse "-1 * 5") env h) in v) === Num(-5) &&
+  (let (v, _) = (interp (parse "(5 + 1) * 3") env h) in v) === Num(18) &&
+  (let (v, _) = (interp (parse "3 * (-5 + 1)") env h) in v) === Num(-12) &&
+  (let (v, _) = (interp (parse "(-1) - 1 - 1 - 1") env h) in v) === Num(-4) &&
+  (let (v, _) = (interp (parse "1 - 1 - 1") env h) in v) === Num(-1) &&
+  (let (v, _) = (interp (parse "3 + 5 * 7 + 2 / 1 * 3") env h) in v) === Num(44)
 
 let%test "Parse hard arithmetics" =
-  (let (v, _) = (interp (parse "-1 - 1 - 1 - 1") env h) in v) == Num(-4) &&
-  (let (v, _) = (interp (parse "20 / 4 / 2") env h) in v) == Num(2) &&
-  (let (v, _) = (interp (parse "20 / 2 - 2") env h) in v) == Num(8) &&
-  (let (v, _) = (interp (parse "let x := 5 in -x - x * 3") env h) in v) == Num(-20)
+  (let (v, _) = (interp (parse "-1 - 1 - 1 - 1") env h) in v) === Num(-4) &&
+  (let (v, _) = (interp (parse "20 / 4 / 2") env h) in v) === Num(2) &&
+  (let (v, _) = (interp (parse "20 / 2 - 2") env h) in v) === Num(8) &&
+  (let (v, _) = (interp (parse "let x := 5 in -x - x * 3") env h) in v) === Num(-20)
 
 let%test "Parse simple comparators" =
-  (let (v, _) = (interp (parse "-5 < 5") env h) in v) == Bool(true) &&
-  (let (v, _) = (interp (parse "5 < 5") env h) in v) == Bool(false) &&
-  (let (v, _) = (interp (parse "5 <= 5") env h) in v) == Bool(true) &&
-  (let (v, _) = (interp (parse "-5 > 5") env h) in v) == Bool(false) &&
-  (let (v, _) = (interp (parse "5 > 5") env h) in v) == Bool(false) &&
-  (let (v, _) = (interp (parse "5 >= 5") env h) in v) == Bool(true)
+  (let (v, _) = (interp (parse "-5 < 5") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "5 < 5") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "5 <= 5") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "-5 > 5") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "5 > 5") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "5 >= 5") env h) in v) === Bool(true)
 
 let%test "Parse hard comparators" =
-  (let (v, _) = (interp (parse "true == false") env h) in v) == Bool(false) &&
-  (let (v, _) = (interp (parse "false == false") env h) in v) == Bool(true) &&
-  (let (v, _) = (interp (parse "5 <= 5 == (5 == 5)") env h) in v) == Bool(true) &&
-  (let (v, _) = (interp (parse "5 < 5 == (5 == 5)") env h) in v) == Bool(false)
+  (let (v, _) = (interp (parse "true == false") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "false == false") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "5 <= 5 == (5 == 5)") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "5 < 5 == (5 == 5)") env h) in v) === Bool(false)
 
 let%test "Parse cond" =
-  (let (v, _) = (interp (parse "let x := 5 in let y := 3 in let x := 10 in x + y") env h) in v) == Num(13)
+  (let (v, _) = (interp (parse "let x := 5 in let y := 3 in let x := 10 in x + y") env h) in v) === Num(13)
 
 let%test "Parse let and cond" =
-  (let (v, _) = (interp (parse "let x := 5 in if x * 5 < 30 != true then 42 else 1337") env h) in v) == Num(1337)
+  (let (v, _) = (interp (parse "let x := 5 in if x * 5 < 30 != true then 42 else 1337") env h) in v) === Num(1337)
 
 let%test "Parse heap commands" =
-  (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; !x") env h) in v) == Num(42) &&
-  (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; mfree(x)") env h) in v) == Unit &&
-  (let (v, _) = (interp (parse "let x := malloc(5, 7) in let a := !x in !(x+1) := a*2; !(x+1)") env h) in v) == Num(10)
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; !x") env h) in v) === Num(42) &&
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; mfree(x)") env h) in v) === Unit &&
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in let a := !x in !(x+1) := a*2; !(x+1)") env h) in v) === Num(10)
 
 let%test "Parse for loop" =
-  (let (v, _) = (interp (parse "let sum := malloc(0) in (for i in [1 to 5] do !sum := !sum + i); !sum") env h) in v) == Num(15)
+  (let (v, _) = (interp (parse "let sum := malloc(0) in (for i in [1 to 5] do !sum := !sum + i); !sum") env h) in v) === Num(15)
 
 let%test "Parse while loop" =
-  (let (v, _) = (interp (parse "let sum := malloc(1) in (while !sum < 20 do !sum := !sum + !sum); !sum") env h) in v) == Num(32)
+  (let (v, _) = (interp (parse "let sum := malloc(1) in (while !sum < 20 do !sum := !sum + !sum); !sum") env h) in v) === Num(32)
