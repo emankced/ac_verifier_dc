@@ -34,5 +34,6 @@ rule read =
   | ',' { COMMA }
   | "malloc" { MALLOC }
   | "mfree" { MFREE }
+  | ';' { SEMICOLON }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }

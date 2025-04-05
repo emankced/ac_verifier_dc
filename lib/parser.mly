@@ -36,6 +36,8 @@ open Interpreter
 %token MALLOC
 %token MFREE
 
+%token SEMICOLON
+
 %token EOF
 
 %right EQ NE
@@ -59,6 +61,7 @@ command:
 | DEREF; loc = expr; ASSIGN; e = expr { Mset(loc, e) }
 | MALLOC; LPARAN; l = expr_list; RPARAN { Malloc(l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(e) }
+| c0 = command; SEMICOLON; c1 = command { Seq(c0, c1) }
 | e = expr { e }
 ;
 
