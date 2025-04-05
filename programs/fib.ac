@@ -1,0 +1,9 @@
+let n := malloc(10) in
+let fib := malloc(0, 1) in
+  (while !n > 0 do
+    !n := !n - 1;
+    let x := !fib + !(fib+1) in
+      !fib := !(fib+1);
+      !(fib+1) := x
+  );
+  !(fib)
