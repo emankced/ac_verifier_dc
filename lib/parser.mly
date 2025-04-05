@@ -31,6 +31,11 @@ open Interpreter
 %token THEN
 %token ELSE
 
+%token DEREF
+%token COMMA
+%token MALLOC
+%token MFREE
+
 %token EOF
 
 %right EQ NE
@@ -48,9 +53,18 @@ prog:
 ;
 
 command:
-| LET; id = ID; ASSIGN; value = expr; IN; body = command { Let(id, value, body) }
+| LET; id = ID; ASSIGN; value = command; IN; body = command { Let(id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
+| DEREF; e = expr { Mget(e) }
+| DEREF; loc = expr; ASSIGN; e = expr { Mset(loc, e) }
+| MALLOC; LPARAN; l = expr_list; RPARAN { Malloc(l) }
+| MFREE; LPARAN; e = expr; RPARAN { Mfree(e) }
 | e = expr { e }
+;
+
+expr_list:
+| x = expr; COMMA; xs = expr_list { x :: xs }
+| x = expr { [x] }
 ;
 
 expr:

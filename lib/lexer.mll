@@ -30,5 +30,9 @@ rule read =
   | "if" { IF }
   | "then" { THEN }
   | "else" { ELSE }
+  | '!' { DEREF }
+  | ',' { COMMA }
+  | "malloc" { MALLOC }
+  | "mfree" { MFREE }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }
