@@ -101,5 +101,6 @@ term:
 | LPARAN; e = expr; RPARAN { e }
 | SUB; LPARAN; e = expr; RPARAN { BinOp(Sub, Num(0), e) }
 | DEREF; e = term { Mget(e) }
+| SUB; id = ID { BinOp(Sub, Num(0), Id(id)) }
 | id = ID; { Id(id) }
 ;

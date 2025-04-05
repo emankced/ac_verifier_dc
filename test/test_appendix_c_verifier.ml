@@ -65,7 +65,8 @@ let%test "Parse simple arithmetics" =
 let%test "Parse hard arithmetics" =
   (let (v, _) = (interp (parse "-1 - 1 - 1 - 1") env h) in v) == Num(-4) &&
   (let (v, _) = (interp (parse "20 / 4 / 2") env h) in v) == Num(2) &&
-  (let (v, _) = (interp (parse "20 / 2 - 2") env h) in v) == Num(8)
+  (let (v, _) = (interp (parse "20 / 2 - 2") env h) in v) == Num(8) &&
+  (let (v, _) = (interp (parse "let x := 5 in -x - x * 3") env h) in v) == Num(-20)
 
 let%test "Parse simple comparators" =
   (let (v, _) = (interp (parse "-5 < 5") env h) in v) == Bool(true) &&
