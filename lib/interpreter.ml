@@ -242,6 +242,7 @@ let (==) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
 | (Loc(lhs), Loc(rhs)) -> lhs == rhs
 | (Bool(lhs), Bool(rhs)) -> lhs == rhs
+| (Unit, Unit) -> true
 | _ -> false
 
 let (!=) (lhs: values) (rhs: values) : bool = not (lhs == rhs)

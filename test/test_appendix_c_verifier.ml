@@ -86,3 +86,8 @@ let%test "Parse cond" =
 
 let%test "Parse let and cond" =
   (let (v, _) = (interp (parse "let x := 5 in if x * 5 < 30 != true then 42 else 1337") env h) in v) == Num(1337)
+
+let%test "Parse heap commands" =
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; !x") env h) in v) == Num(42) &&
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; mfree(x)") env h) in v) == Unit &&
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in let a := !x in !x+1 := a*2; !x+1") env h) in v) == Num(10)
