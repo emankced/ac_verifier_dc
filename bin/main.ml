@@ -4,7 +4,7 @@ open Appendix_c_verifier.Parse
 let env: environment = EnvironmentMap.empty
 let h: heap = HeapMap.empty
 
-let () = print_endline "Appendix C Verifier"
+let () = print_endline "Appendix C Verifier"; print_newline ()
 
 let () = if (Array.length Sys.argv) != 2 then
   print_endline ("Usage: " ^ Array.get Sys.argv 0 ^ " <file>")
@@ -21,7 +21,10 @@ else
       !lines
   in
     let prog = parse src in
+      print_endline "AST:";
       print_endline (string_of_expression prog);
+      print_newline ();
+      print_endline "Result:";
       let (res, _) = interp prog env h in
         match res with
         | Loc(l) -> print_string "Loc("; print_int l; print_endline ")"
