@@ -35,5 +35,11 @@ rule read =
   | "malloc" { MALLOC }
   | "mfree" { MFREE }
   | ';' { SEMICOLON }
+  | "while" { WHILE }
+  | "do" { DO }
+  | "for" { FOR }
+  | "to" { TO }
+  | '[' { LBRACKET }
+  | ']' { RBRACKET }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }

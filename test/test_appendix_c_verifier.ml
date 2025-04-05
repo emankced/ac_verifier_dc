@@ -90,4 +90,10 @@ let%test "Parse let and cond" =
 let%test "Parse heap commands" =
   (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; !x") env h) in v) == Num(42) &&
   (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; mfree(x)") env h) in v) == Unit &&
-  (let (v, _) = (interp (parse "let x := malloc(5, 7) in let a := !x in !x+1 := a*2; !x+1") env h) in v) == Num(10)
+  (let (v, _) = (interp (parse "let x := malloc(5, 7) in let a := !x in !(x+1) := a*2; !(x+1)") env h) in v) == Num(10)
+
+let%test "Parse for loop" =
+  (let (v, _) = (interp (parse "let sum := malloc(0) in (for i in [1 to 5] do !sum := !sum + i); !sum") env h) in v) == Num(15)
+
+let%test "Parse while loop" =
+  (let (v, _) = (interp (parse "let sum := malloc(1) in (while !sum < 20 do !sum := !sum + !sum); !sum") env h) in v) == Num(32)

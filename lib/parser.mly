@@ -38,6 +38,13 @@ open Interpreter
 
 %token SEMICOLON
 
+%token WHILE
+%token DO
+%token FOR
+%token TO
+%token LBRACKET
+%token RBRACKET
+
 %token EOF
 
 %right EQ NE
@@ -57,10 +64,12 @@ prog:
 command:
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
-| DEREF; e = expr { Mget(e) }
-| DEREF; loc = expr; ASSIGN; e = expr { Mset(loc, e) }
+| DEREF; loc = term; ASSIGN; e = expr { Mset(loc, e) }
 | MALLOC; LPARAN; l = expr_list; RPARAN { Malloc(l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(e) }
+| WHILE; cond = expr; DO; body = command { While(cond, body) }
+| FOR; id = ID; IN; LBRACKET; start = expr; TO; end_ = expr; RBRACKET; DO; body = command { For(id, start, end_, body) }
+| LPARAN; c = command; RPARAN { c }
 | c0 = command; SEMICOLON; c1 = command { Seq(c0, c1) }
 | e = expr { e }
 ;
@@ -91,5 +100,6 @@ term:
 | FALSE { Bool(false) }
 | LPARAN; e = expr; RPARAN { e }
 | SUB; LPARAN; e = expr; RPARAN { BinOp(Sub, Num(0), e) }
+| DEREF; e = term { Mget(e) }
 | id = ID; { Id(id) }
 ;

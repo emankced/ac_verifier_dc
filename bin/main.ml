@@ -6,7 +6,7 @@ let h: heap = HeapMap.empty
 
 let () = print_endline "Appendix C Verifier"
 
-let src = "let x := malloc(5, 7) in !x := 42; !x"
+let src = "let sum := malloc(1) in (while !sum < 20 do !sum := !sum + !sum); !sum"
 
 let () =
   let prog = parse src in
