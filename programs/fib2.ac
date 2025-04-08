@@ -1,6 +1,6 @@
 let n := malloc(10) in
-let fib := malloc(0) in
-let fib2 := malloc(1) in
+let fib := malloc(0, 1) in
+let fib2 := fib+1 in
   (while !n > 0 do
     !n := !n - 1;
     let x := !fib + !fib2 in
@@ -8,7 +8,6 @@ let fib2 := malloc(1) in
       !fib := x
   );
   let result := !(fib) in
-    mfree(fib2);
     mfree(fib);
     mfree(n);
     result
