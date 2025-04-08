@@ -1,0 +1,10 @@
+let sum := malloc(0) in
+let list := malloc(15, 3, 7, 10, 2, 5) in
+let size := 6 in
+  (for i in [0 to size-1] do
+    !sum := !sum + !(list + i)
+  );
+  let result := !sum in
+    mfree(list);
+    mfree(sum);
+    result
