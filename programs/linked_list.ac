@@ -1,0 +1,28 @@
+let sixth := malloc(null, 7) in
+let fifth := malloc(sixth, 3) in
+let fourth := malloc(fifth, 9) in
+let third := malloc(fourth, 1) in
+let second := malloc(third, 5) in
+let first := malloc(second, 6) in
+
+let max := malloc(0) in
+let next := malloc(first) in
+  (while !next != null do
+    let v := !(!next + 1) in
+      (if v > !max then
+        !max := v
+      );
+    !next := !!next
+  );
+
+  let result := !max in
+    mfree(max);
+    !next := first;
+    (while !next != null do
+      let addr := !next in
+        !next := !!next;
+        mfree(addr)
+    );
+    mfree(next);
+
+    result
