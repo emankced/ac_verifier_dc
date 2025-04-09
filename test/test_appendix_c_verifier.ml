@@ -82,11 +82,14 @@ let%test "Parse hard comparators" =
   (let (v, _) = (interp (parse "5 <= 5 == (5 == 5)") env h) in v) === Bool(true) &&
   (let (v, _) = (interp (parse "5 < 5 == (5 == 5)") env h) in v) === Bool(false)
 
-let%test "Parse cond" =
+let%test "Parse let" =
   (let (v, _) = (interp (parse "let x := 5 in let y := 3 in let x := 10 in x + y") env h) in v) === Num(13)
 
 let%test "Parse let and cond" =
   (let (v, _) = (interp (parse "let x := 5 in if x * 5 < 30 != true then 42 else 1337") env h) in v) === Num(1337)
+
+let%test "Parse short cond" =
+  (let (v, _) = (interp (parse "let x := malloc(5) in (if true then !x := !x + 7); (if false then !x := !x + 3); !x") env h) in v) === Num(12)
 
 let%test "Parse heap commands" =
   (let (v, _) = (interp (parse "let x := malloc(5, 7) in !x := 42; !x") env h) in v) === Num(42) &&

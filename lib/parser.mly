@@ -65,6 +65,7 @@ prog:
 command:
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
+| IF; cond = expr; THEN; then_body = command { Cond(cond, then_body, Unit) }
 | DEREF; loc = term; ASSIGN; e = expr { Mset(loc, e) }
 | MALLOC; LPARAN; l = expr_list; RPARAN { Malloc(l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(e) }
