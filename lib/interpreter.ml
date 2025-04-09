@@ -66,7 +66,7 @@ let malloc (init_values: values list) (h: heap) : int * heap =
             let loc = loc + size in
               if loc > previous_max then loc else previous_max)
         h
-        0
+        0x400000
     in
       (max_available_loc, h |> HeapMap.add max_available_loc init_values)
 

@@ -6,6 +6,7 @@ open Interpreter
 %token <string> ID
 %token TRUE
 %token FALSE
+%token NULL
 
 %token ADD
 %token SUB
@@ -98,6 +99,7 @@ term:
 | SUB; n = NUM { Num(-n) }
 | TRUE { Bool(true) }
 | FALSE { Bool(false) }
+| NULL { Loc(0) }
 | LPARAN; e = expr; RPARAN { e }
 | SUB; LPARAN; e = expr; RPARAN { BinOp(Sub, Num(0), e) }
 | DEREF; e = term { Mget(e) }
