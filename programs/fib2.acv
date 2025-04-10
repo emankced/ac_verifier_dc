@@ -1,0 +1,27 @@
+# emp
+let n := malloc(10) in
+# n -> 10 * emp * n == _
+let fib := malloc(0, 1) in
+# n -> 10 * fib -> 0 * fib+1 -> 1 * emp * n == _ * fib == _
+let fib2 := fib+1 in
+# n -> 10 * fib -> 0 * fib2 -> 1 * emp * n == _ * fib == _ * fib2 == fib+1
+  (while !n > 0 do
+# n -> ?vn * fib -> _ * fib2 -> _ * emp * n == _ * fib == _ * fib2 == fib+1 * vn >= 0
+    !n := !n - 1;
+# n -> ?vn * fib -> _ * fib2 -> _ * emp * n == _ * fib == _ * fib2 == fib+1 * vn >= 0
+    let x := !fib + !fib2 in
+# n -> ?vn * fib -> ?vfib * fib2 -> ?vfib2 * emp * n == _ * fib == _ * fib2 == fib+1 * vn >= 0 * x == vfib + vfib2
+      !fib2 := !fib;
+# n -> ?vn * fib -> ?vfib * fib2 -> ?vfib * emp * n == _ * fib == _ * fib2 == fib+1 * vn >= 0 * x == _
+      !fib := x
+# n -> ?vn * fib -> x * fib2 -> _ * emp * n == _ * fib == _ * fib2 == fib+1 * vn >= 0 * x == _
+  );
+# n -> 0 * fib -> _ * fib2 -> _ * emp * n == _ * fib == _ * fib2 == fib+1
+  let result := !(fib) in
+# n -> 0 * fib -> ?vfib * fib2 -> _ * emp * n == _ * fib == _ * fib2 == fib+1 * result == vfib
+    mfree(fib);
+# n -> 0 * emp * n == _ * fib == _ * fib2 == fib+1 * result == _
+    mfree(n);
+# emp * n == _ * fib == _ * fib2 == fib+1 * result == _
+    result
+# emp
