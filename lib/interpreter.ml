@@ -42,6 +42,7 @@ type expression =
 | Mfree of expression
 | While of expression * expression
 | For of string * expression * expression * expression
+| Assert of expression * expression
 (* functions *)
 (* recursive let *)
 
@@ -237,6 +238,7 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
               interp (For(id, Num(start-1), Num(end_), body)) env h
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
+| Assert(_assertion, command) -> interp command env h
 
 let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
@@ -277,3 +279,4 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Mget(loc) -> "Mget(" ^ string_of_expression loc ^ ")"
 | For(id, start, end_, body) -> "For(\"" ^ id ^ "\", " ^ string_of_expression start ^ ", " ^ string_of_expression end_ ^ ", " ^ string_of_expression body ^ ")"
 | While(cond, body) -> "While(" ^ string_of_expression cond ^ ", " ^ string_of_expression body ^ ")"
+| Assert(assertion, command) -> "Assert(" ^ string_of_expression assertion ^ ", " ^ string_of_expression command ^ ")"

@@ -46,6 +46,8 @@ open Interpreter
 %token LBRACKET
 %token RBRACKET
 
+%token ASSERT
+
 %token EOF
 
 %right EQ NE
@@ -63,6 +65,7 @@ prog:
 ;
 
 command:
+| a = assertion; c = command { Assert(a, c) }
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
 | IF; cond = expr; THEN; then_body = command { Cond(cond, then_body, Unit) }
@@ -106,4 +109,13 @@ term:
 | DEREF; e = term { Mget(e) }
 | SUB; id = ID { BinOp(Sub, Num(0), Id(id)) }
 | id = ID; { Id(id) }
+;
+
+assertion:
+| ASSERT; a = assert_expr; ASSERT { a }
+;
+
+assert_expr:
+| TRUE { Bool(true) }
+| FALSE { Bool(false) }
 ;
