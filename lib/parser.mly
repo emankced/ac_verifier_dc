@@ -23,6 +23,7 @@ open Interpreter
 
 %token AND
 %token OR
+%token NOT
 
 %token LPARAN
 %token RPARAN
@@ -111,10 +112,14 @@ term:
 | TRUE { Bool(true) }
 | FALSE { Bool(false) }
 | NULL { Loc(0) }
+| NOT; TRUE { Bool(false) }
+| NOT; FALSE { Bool(true) }
 | LPARAN; e = expr; RPARAN { e }
 | SUB; LPARAN; e = expr; RPARAN { BinOp(Sub, Num(0), e) }
+| NOT; LPARAN; e = expr; RPARAN { BinOp(Eq, e, Bool(false)) }
 | DEREF; e = term { Mget(e) }
 | SUB; id = ID { BinOp(Sub, Num(0), Id(id)) }
+| NOT; id = ID { BinOp(Eq, Id(id), Bool(false)) }
 | id = ID; { Id(id) }
 ;
 
@@ -148,8 +153,12 @@ term_no_deref:
 | TRUE { Bool(true) }
 | FALSE { Bool(false) }
 | NULL { Loc(0) }
+| NOT; TRUE { Bool(false) }
+| NOT; FALSE { Bool(true) }
 | LPARAN; e = expr_no_deref; RPARAN { e }
 | SUB; LPARAN; e = expr_no_deref; RPARAN { BinOp(Sub, Num(0), e) }
+| NOT; LPARAN; e = expr_no_deref; RPARAN { BinOp(Eq, e, Bool(false)) }
 | SUB; id = ID { BinOp(Sub, Num(0), Id(id)) }
+| NOT; id = ID { BinOp(Eq, Id(id), Bool(false)) }
 | id = ID; { Id(id) }
 ;

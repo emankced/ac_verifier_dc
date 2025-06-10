@@ -45,5 +45,6 @@ rule read =
   | '@' { ASSERT }
   | "&&" { AND }
   | "||" { OR }
+  | "not" { NOT }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }
