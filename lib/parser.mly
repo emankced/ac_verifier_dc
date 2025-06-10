@@ -123,6 +123,33 @@ assertion:
 ;
 
 assert_expr:
+| e = expr_no_deref { e }
+;
+
+expr_no_deref:
+| t = term_no_deref { t }
+| lhs = expr_no_deref; ADD; rhs = expr_no_deref { BinOp(Add, lhs, rhs) }
+| lhs = expr_no_deref; SUB; rhs = expr_no_deref { BinOp(Sub, lhs, rhs) }
+| lhs = expr_no_deref; MUL; rhs = expr_no_deref { BinOp(Mul, lhs, rhs) }
+| lhs = expr_no_deref; DIV; rhs = expr_no_deref { BinOp(Div, lhs, rhs) }
+| lhs = expr_no_deref; EQ; rhs = expr_no_deref { BinOp(Eq, lhs, rhs) }
+| lhs = expr_no_deref; NE; rhs = expr_no_deref { BinOp(Ne, lhs, rhs) }
+| lhs = expr_no_deref; LE; rhs = expr_no_deref { BinOp(Le, lhs, rhs) }
+| lhs = expr_no_deref; LT; rhs = expr_no_deref { BinOp(Lt, lhs, rhs) }
+| lhs = expr_no_deref; GE; rhs = expr_no_deref { BinOp(Ge, lhs, rhs) }
+| lhs = expr_no_deref; GT; rhs = expr_no_deref { BinOp(Gt, lhs, rhs) }
+| lhs = expr_no_deref; AND; rhs = expr_no_deref { BinOp(And, lhs, rhs) }
+| lhs = expr_no_deref; OR; rhs = expr_no_deref { BinOp(Or, lhs, rhs) }
+;
+
+term_no_deref:
+| n = NUM { Num(n) }
+| SUB; n = NUM { Num(-n) }
 | TRUE { Bool(true) }
 | FALSE { Bool(false) }
+| NULL { Loc(0) }
+| LPARAN; e = expr_no_deref; RPARAN { e }
+| SUB; LPARAN; e = expr_no_deref; RPARAN { BinOp(Sub, Num(0), e) }
+| SUB; id = ID { BinOp(Sub, Num(0), Id(id)) }
+| id = ID; { Id(id) }
 ;
