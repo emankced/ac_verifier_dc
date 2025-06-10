@@ -82,6 +82,24 @@ let%test "Parse hard comparators" =
   (let (v, _) = (interp (parse "5 <= 5 == (5 == 5)") env h) in v) === Bool(true) &&
   (let (v, _) = (interp (parse "5 < 5 == (5 == 5)") env h) in v) === Bool(false)
 
+let%test "Parse simple bool operations" =
+  (let (v, _) = (interp (parse "true && true") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "true && false") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "false && true") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "false && false") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "true || true") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "true || false") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "false || true") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "false || false") env h) in v) === Bool(false)
+
+let%test "Parse hard bool operations" =
+  (let (v, _) = (interp (parse "false && true || false") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "true || false && true") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "true && true && false || false || false || true") env h) in v) === Bool(true) &&
+  (let (v, _) = (interp (parse "true && true && false || false || false") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "5 <= 5 == (5 == 5) && 5 < 5 == (5 == 5)") env h) in v) === Bool(false) &&
+  (let (v, _) = (interp (parse "5 <= 5 == (5 == 5) || 5 < 5 == (5 == 5)") env h) in v) === Bool(true)
+
 let%test "Parse let" =
   (let (v, _) = (interp (parse "let x := 5 in let y := 3 in let x := 10 in x + y") env h) in v) === Num(13)
 

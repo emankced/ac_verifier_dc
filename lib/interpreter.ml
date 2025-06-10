@@ -24,6 +24,8 @@ type binop =
 | Lt
 | Ge
 | Gt
+| And
+| Or
 
 (** Expressions as AST *)
 type expression =
@@ -179,6 +181,8 @@ let rec interp (expr: expression) (env: environment) (h: heap) : values * heap =
         | (Lt, Loc(lhs), Loc(rhs)) -> (Bool(lhs < rhs), h)
         | (Ge, Loc(lhs), Loc(rhs)) -> (Bool(lhs >= rhs), h)
         | (Gt, Loc(lhs), Loc(rhs)) -> (Bool(lhs > rhs), h)
+        | (And, Bool(lhs), Bool(rhs)) -> (Bool(lhs && rhs), h)
+        | (Or, Bool(lhs), Bool(rhs)) -> (Bool(lhs || rhs), h)
         | _ -> raise (InterpreterException "Unsupported binary operation!")
         )
 | Seq(expr0, expr1) -> let (_, h) = interp expr0 env h in interp expr1 env h
@@ -266,6 +270,8 @@ let rec string_of_expression (expr: expression) : string = match expr with
     | Lt -> "Lt"
     | Ge -> "Ge"
     | Gt -> "Gt"
+    | And -> "And"
+    | Or -> "Or"
     )
   in
     "BinOp(" ^ op ^ ", " ^ (string_of_expression lhs) ^ ", " ^ (string_of_expression rhs) ^ ")"

@@ -43,5 +43,7 @@ rule read =
   | '[' { LBRACKET }
   | ']' { RBRACKET }
   | '@' { ASSERT }
+  | "&&" { AND }
+  | "||" { OR }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }

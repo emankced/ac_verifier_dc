@@ -21,6 +21,9 @@ open Interpreter
 %token EQ
 %token NE
 
+%token AND
+%token OR
+
 %token LPARAN
 %token RPARAN
 
@@ -50,6 +53,8 @@ open Interpreter
 
 %token EOF
 
+%right AND
+%right OR
 %right EQ NE
 %right LE LT GE GT
 
@@ -96,6 +101,8 @@ expr:
 | lhs = expr; LT; rhs = expr { BinOp(Lt, lhs, rhs) }
 | lhs = expr; GE; rhs = expr { BinOp(Ge, lhs, rhs) }
 | lhs = expr; GT; rhs = expr { BinOp(Gt, lhs, rhs) }
+| lhs = expr; AND; rhs = expr { BinOp(And, lhs, rhs) }
+| lhs = expr; OR; rhs = expr { BinOp(Or, lhs, rhs) }
 ;
 
 term:
