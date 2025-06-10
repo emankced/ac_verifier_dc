@@ -26,6 +26,9 @@ type binop =
 | Gt
 | And
 | Or
+| Sep
+| SepImp
+| PointsTo
 
 (** Expressions as AST *)
 type expression =
@@ -272,6 +275,9 @@ let rec string_of_expression (expr: expression) : string = match expr with
     | Gt -> "Gt"
     | And -> "And"
     | Or -> "Or"
+    | Sep -> "Sep"
+    | SepImp -> "SepImp"
+    | PointsTo -> "PointsTo"
     )
   in
     "BinOp(" ^ op ^ ", " ^ (string_of_expression lhs) ^ ", " ^ (string_of_expression rhs) ^ ")"

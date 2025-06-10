@@ -13,6 +13,9 @@ rule read =
   | "true" { TRUE }
   | "false" { FALSE }
   | "null" { NULL }
+  | "**" { SEP }
+  | "-*" { SEPIMP }
+  | "->" { POINTSTO }
   | '+' { ADD }
   | '-' { SUB }
   | '*' { MUL }

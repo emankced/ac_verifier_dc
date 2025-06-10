@@ -25,6 +25,10 @@ open Interpreter
 %token OR
 %token NOT
 
+%token SEP
+%token SEPIMP
+%token POINTSTO
+
 %token LPARAN
 %token RPARAN
 
@@ -54,10 +58,13 @@ open Interpreter
 
 %token EOF
 
-%right AND
+%right SEPIMP
+%right SEP
 %right OR
+%right AND
 %right EQ NE
 %right LE LT GE GT
+%right POINTSTO
 
 %left ADD SUB
 %left MUL DIV
@@ -129,6 +136,11 @@ assertion:
 
 assert_expr:
 | e = expr_no_deref { e }
+| lhs = assert_expr; SEP; rhs = assert_expr { BinOp(Sep, lhs, rhs) }
+| lhs = assert_expr; SEPIMP; rhs = assert_expr { BinOp(SepImp, lhs, rhs) }
+| lhs = assert_expr; POINTSTO; rhs = assert_expr { BinOp(PointsTo, lhs, rhs) }
+| LPARAN; e = assert_expr; RPARAN { e }
+(* TODO: predicates, forall, (exists,) always *)
 ;
 
 expr_no_deref:
