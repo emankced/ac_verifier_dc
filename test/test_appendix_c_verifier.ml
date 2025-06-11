@@ -20,14 +20,14 @@ let%test "Conditional test" =
       | _ -> false
 
 let%test "Simple heap access test" =
-  let prog = Let("x", Malloc([Num(-6); Num(5)]), BinOp(Add, Mget(Id("x")), Mget(BinOp(Add, Id("x"), Loc(1))))) in
+  let prog = Let("x", Malloc([Num(-6); Num(5)]), BinOp(Add, Mget(Id("x")), Mget(BinOp(Add, Id("x"), Num(1))))) in
     let (res, _) = interp prog env h in
       match res with
       | Num(-1) -> true
       | _ -> false
 
 let%test "Invalid heap access test" =
-  let prog = Let("x", Malloc([Num(3)]), Mget(BinOp(Add, Id("x"), Loc(1)))) in
+  let prog = Let("x", Malloc([Num(3)]), Mget(BinOp(Add, Id("x"), Num(1)))) in
     try
       ignore (interp prog env h);
       false

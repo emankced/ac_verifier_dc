@@ -28,7 +28,7 @@ else
       print_endline "Result:";
       let (res, _) = interp prog env h in
         match res with
-        | Loc(l) -> print_string "Loc("; print_int l; print_endline ")"
+        | Loc(l, o) -> print_string "Loc("; print_int l; print_string ", "; print_int o; print_endline ")"
         | Num(n) -> print_string "Num("; print_int n; print_endline ")"
         | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
         | Unit -> print_endline "Unit"

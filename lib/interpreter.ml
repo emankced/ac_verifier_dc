@@ -8,7 +8,7 @@ module HeapMap = Map.Make(Int)
 
 (** Return values of the interpreter *)
 type values =
-| Loc of int
+| Loc of int * int (* base location and offset*)
 | Num of int
 | Bool of bool
 | Unit
@@ -43,22 +43,15 @@ let malloc (init_values: values list) (h: heap) : int * heap =
 let mfree (loc: int) (h: heap) : heap = h |> HeapMap.remove loc
 
 (** Memory featching from the heap *)
-let mget (loc: int) (h: heap) : values =
+let mget (loc: int) (off: int) (h: heap) : values =
   if HeapMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
   else
-    let (hloc, values_list) =
-      HeapMap.fold
-        (fun hloc values_list (previous_hloc, previous_values_list) ->
-          if hloc <= loc && hloc > previous_hloc then (hloc, values_list) else (previous_hloc, previous_values_list))
-        h
-        (-1, [])
-      in
-        let offset = loc - hloc in
-          if offset >= List.length values_list then
-            raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
-          else
-            List.nth values_list offset
+    let values_list = HeapMap.find loc h in
+      if off >= List.length values_list then
+        raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
+      else
+        List.nth values_list off
 
 (** Replace nth element if the type matches *)
 let rec replace_nth (l: values list) (v: values) (n: int) : values list =
@@ -77,27 +70,20 @@ let rec replace_nth (l: values list) (v: values) (n: int) : values list =
         x :: replace_nth xs v (n-1)
 
 (** Memory mutation on the heap *)
-let mset (loc: int) (v: values) (h: heap) : heap =
+let mset (loc: int) (off: int) (v: values) (h: heap) : heap =
   if HeapMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
   else
-    let (hloc, values_list) =
-      HeapMap.fold
-        (fun hloc values_list (previous_hloc, previous_values_list) ->
-          if hloc <= loc && hloc > previous_hloc then (hloc, values_list) else (previous_hloc, previous_values_list))
-        h
-        (-1, [])
-      in
-        let offset = loc - hloc in
-          if offset >= List.length values_list then
-            raise (InterpreterException ("mget got offset out of range: " ^ string_of_int loc))
-          else
-            let values_list = replace_nth values_list v offset in
-              h |> HeapMap.add hloc values_list
+    let values_list = HeapMap.find loc h in
+      if off >= List.length values_list then
+        raise (InterpreterException ("mget got offset out of range: " ^ string_of_int loc))
+      else
+        let values_list = replace_nth values_list v off in
+          h |> HeapMap.add loc values_list
 
 (** Evaluates expressions based on an environment and heap *)
 let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * heap = match expr with
-| Loc(l) -> (Loc(l), h)
+| Loc(l) -> (Loc(l, 0), h)
 | Num(n) -> (Num(n), h)
 | Bool(b) -> (Bool(b), h)
 | Unit -> (Unit, h)
@@ -120,33 +106,21 @@ let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * he
         | (Sub, Num(lhs), Num(rhs)) -> (Num(lhs - rhs), h)
         | (Mul, Num(lhs), Num(rhs)) -> (Num(lhs * rhs), h)
         | (Div, Num(lhs), Num(rhs)) -> (Num(lhs / rhs), h)
-        | (Add, Loc(lhs), Loc(rhs)) -> (Loc(lhs + rhs), h)
-        | (Sub, Loc(lhs), Loc(rhs)) -> (Loc(lhs - rhs), h)
-        | (Mul, Loc(lhs), Loc(rhs)) -> (Loc(lhs * rhs), h)
-        | (Div, Loc(lhs), Loc(rhs)) -> (Loc(lhs / rhs), h)
-        | (Add, Loc(lhs), Num(rhs)) -> (Loc(lhs + rhs), h)
-        | (Sub, Loc(lhs), Num(rhs)) -> (Loc(lhs - rhs), h)
-        | (Mul, Loc(lhs), Num(rhs)) -> (Loc(lhs * rhs), h)
-        | (Div, Loc(lhs), Num(rhs)) -> (Loc(lhs / rhs), h)
-        | (Add, Num(lhs), Loc(rhs)) -> (Loc(lhs + rhs), h)
-        | (Sub, Num(lhs), Loc(rhs)) -> (Loc(lhs - rhs), h)
-        | (Mul, Num(lhs), Loc(rhs)) -> (Loc(lhs * rhs), h)
-        | (Div, Num(lhs), Loc(rhs)) -> (Loc(lhs / rhs), h)
+        | (Add, Loc(l, lhs), Num(rhs)) -> (Loc(l, lhs + rhs), h)
+        | (Sub, Loc(l, lhs), Num(rhs)) -> (Loc(l, lhs - rhs), h)
+        | (Add, Num(lhs), Loc(l, rhs)) -> (Loc(l, lhs + rhs), h)
+        | (Sub, Num(lhs), Loc(l, rhs)) -> (Loc(l, lhs - rhs), h)
         | (Eq, Num(lhs), Num(rhs)) -> (Bool(lhs == rhs), h)
         | (Ne, Num(lhs), Num(rhs)) -> (Bool(lhs != rhs), h)
         | (Eq, Bool(lhs), Bool(rhs)) -> (Bool(lhs == rhs), h)
         | (Ne, Bool(lhs), Bool(rhs)) -> (Bool(lhs != rhs), h)
-        | (Eq, Loc(lhs), Loc(rhs)) -> (Bool(lhs == rhs), h)
-        | (Ne, Loc(lhs), Loc(rhs)) -> (Bool(lhs != rhs), h)
+        | (Eq, Loc(lhs, olhs), Loc(rhs, orhs)) -> (Bool(lhs == rhs && olhs == orhs), h)
+        | (Ne, Loc(lhs, olhs), Loc(rhs, orhs)) -> (Bool(lhs != rhs || olhs != orhs), h)
         (* should unit get a comparison definition? *)
         | (Le, Num(lhs), Num(rhs)) -> (Bool(lhs <= rhs), h)
         | (Lt, Num(lhs), Num(rhs)) -> (Bool(lhs < rhs), h)
         | (Ge, Num(lhs), Num(rhs)) -> (Bool(lhs >= rhs), h)
         | (Gt, Num(lhs), Num(rhs)) -> (Bool(lhs > rhs), h)
-        | (Le, Loc(lhs), Loc(rhs)) -> (Bool(lhs <= rhs), h)
-        | (Lt, Loc(lhs), Loc(rhs)) -> (Bool(lhs < rhs), h)
-        | (Ge, Loc(lhs), Loc(rhs)) -> (Bool(lhs >= rhs), h)
-        | (Gt, Loc(lhs), Loc(rhs)) -> (Bool(lhs > rhs), h)
         | (And, Bool(lhs), Bool(rhs)) -> (Bool(lhs && rhs), h)
         | (Or, Bool(lhs), Bool(rhs)) -> (Bool(lhs || rhs), h)
         | _ -> raise (InterpreterException "Unsupported binary operation!")
@@ -162,25 +136,25 @@ let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * he
         ([], h)
       in
         let (loc, h) = malloc values_list h in
-          (Loc(loc), h)
+          (Loc(loc, 0), h)
 | Mfree(loc) ->
     let (loc, h) = interp loc env h in
       (match loc with
-      | Loc(l) -> (Unit, mfree l h)
-      | _ -> raise (InterpreterException "Mfree requires a location!")
+      | Loc(l, 0) -> (Unit, mfree l h)
+      | _ -> raise (InterpreterException "Mfree requires a base location!")
       )
 | Mget(loc) ->
     let (loc, h) = interp loc env h in
       (match loc with
-      | Loc(l) -> (mget l h, h)
+      | Loc(l, o) -> (mget l o h, h)
       | _ -> raise (InterpreterException "Mget requires a location!")
       )
 | Mset(loc, expr) ->
     let (loc, h) = interp loc env h in
       (match loc with
-      | Loc(l) ->
+      | Loc(l, o) ->
         let (expr, h) = interp expr env h in
-          (Unit, mset l expr h)
+          (Unit, mset l o expr h)
       | _ -> raise (InterpreterException "Mset requires a location!")
       )
 | While(condition, body) ->
@@ -212,7 +186,7 @@ let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * he
 
 let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
-| (Loc(lhs), Loc(rhs)) -> lhs == rhs
+| (Loc(lhs, olhs), Loc(rhs, orhs)) -> lhs == rhs && olhs == orhs
 | (Bool(lhs), Bool(rhs)) -> lhs == rhs
 | (Unit, Unit) -> true
 | _ -> false
