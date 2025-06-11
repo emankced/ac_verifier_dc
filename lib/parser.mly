@@ -1,5 +1,5 @@
 %{
-open Interpreter
+open Ast
 %}
 
 %token <int> NUM
@@ -69,7 +69,7 @@ open Interpreter
 %left ADD SUB
 %left MUL DIV
 
-%start <Interpreter.expression> prog
+%start <Ast.expression> prog
 %%
 
 
