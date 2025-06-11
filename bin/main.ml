@@ -1,6 +1,7 @@
 open Appendix_c_verifier.Ast
 open Appendix_c_verifier.Interpreter
 open Appendix_c_verifier.Parse
+open Appendix_c_verifier.Analysis
 
 let env: environment = EnvironmentMap.empty
 let h: heap = HeapMap.empty
@@ -24,6 +25,18 @@ else
     let prog = parse src in
       print_endline "AST:";
       print_endline (string_of_expression prog);
+      print_newline ();
+      (try
+        let (tc_res, _) = type_check prog TypeEnvironmentMap.empty TypeHeapMap.empty in
+          print_string "Type: ";
+          (match tc_res with
+          | Loc -> print_endline "Loc"
+          | Num -> print_endline "Num"
+          | Bool -> print_endline "Bool"
+          | Unit -> print_endline "Unit"
+          | Unknown -> print_endline "Unknown"
+          )
+      with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e);
       print_newline ();
       print_endline "Result:";
       let (res, _) = interp prog env h in
