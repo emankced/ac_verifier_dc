@@ -48,7 +48,7 @@ let mget (loc: int) (off: int) (h: heap) : values =
     raise (InterpreterException "mget cannot get anything from an empty heap!")
   else
     let values_list = HeapMap.find loc h in
-      if off >= List.length values_list then
+      if off < 0 || off >= List.length values_list then
         raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
       else
         List.nth values_list off
@@ -75,7 +75,7 @@ let mset (loc: int) (off: int) (v: values) (h: heap) : heap =
     raise (InterpreterException "mset cannot set anything on an empty heap!")
   else
     let values_list = HeapMap.find loc h in
-      if off >= List.length values_list then
+      if off < 0 || off >= List.length values_list then
         raise (InterpreterException ("mget got offset out of range: " ^ string_of_int loc))
       else
         let values_list = replace_nth values_list v off in
