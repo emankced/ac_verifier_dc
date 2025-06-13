@@ -23,11 +23,12 @@ else
       !lines
   in
     let prog = parse src in
+    let prog = prepare_annotation prog in
       print_endline "AST:";
       print_endline (string_of_expression prog);
       print_newline ();
       (try
-        let (tc_res, _) = type_check prog TypeEnvironmentMap.empty TypeHeapMap.empty in
+        let (tc_res, prog) = type_check prog TypeEnvironmentMap.empty in
           print_string "Type: ";
           (match tc_res with
           | Loc -> print_endline "Loc"
@@ -35,7 +36,9 @@ else
           | Bool -> print_endline "Bool"
           | Unit -> print_endline "Unit"
           | Unknown -> print_endline "Unknown"
-          )
+          );
+          print_endline (string_of_expression prog);
+          print_newline ();
       with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e);
       print_newline ();
       print_endline "Result:";

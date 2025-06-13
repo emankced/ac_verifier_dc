@@ -34,6 +34,7 @@ type expression =
 | While of expression * expression
 | For of string * expression * expression * expression
 | Assert of expression * expression
+| Annotation of (string * string) list * expression (* notes consist of key and value pairs *)
 (* functions *)
 (* recursive let *)
 
@@ -73,3 +74,4 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | For(id, start, end_, body) -> "For(\"" ^ id ^ "\", " ^ string_of_expression start ^ ", " ^ string_of_expression end_ ^ ", " ^ string_of_expression body ^ ")"
 | While(cond, body) -> "While(" ^ string_of_expression cond ^ ", " ^ string_of_expression body ^ ")"
 | Assert(assertion, command) -> "Assert(" ^ string_of_expression assertion ^ ", " ^ string_of_expression command ^ ")"
+| Annotation(notes, expr) -> "Annotation([" ^ List.fold_right (fun (k, v) s -> (if String.equal s "" then "(" else s ^ ", (") ^ k ^ ", " ^ v ^ ")") notes "" ^ "], " ^ string_of_expression expr ^ ")"

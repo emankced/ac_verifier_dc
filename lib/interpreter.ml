@@ -183,6 +183,7 @@ let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * he
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
 | Assert(_assertion, command) -> interp command env h
+| Annotation(_notes, expr) -> interp expr env h
 
 let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
