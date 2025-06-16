@@ -16,6 +16,12 @@ type binop =
 | SepImp
 | PointsTo
 
+(** Types used creating a struct *)
+type struct_types =
+| Num
+| Bool
+| LocStruct of string
+
 (** Expressions as AST *)
 type expression =
 | Loc of int
@@ -23,6 +29,7 @@ type expression =
 | Bool of bool
 | Unit
 | Let of string * expression * expression
+| Struct of string * (struct_types list) * expression
 | Id of string
 | Cond of expression * expression * expression
 | BinOp of binop * expression * expression
@@ -38,11 +45,20 @@ type expression =
 (* functions *)
 (* recursive let *)
 
+let string_of_struct_type (t: struct_types) : string = match t with
+| Num -> "Num"
+| Bool -> "Bool"
+| LocStruct(id) -> "LocStruct(" ^ id ^ ")"
+
 let rec string_of_expression (expr: expression) : string = match expr with
 | Num(n) -> "Num(" ^ string_of_int n ^ ")"
 | Bool(b) -> "Bool(" ^ (if b then "true" else "false") ^ ")"
 | Loc(l) -> "Loc(" ^ string_of_int l ^ ")"
 | Unit -> "Unit"
+| Struct(name, types, body) -> "Struct(" ^ name ^ ", [" ^
+    List.fold_right (fun t s ->
+      (if String.equal s "" then s else s ^ ", ") ^ string_of_struct_type t
+    ) types "" ^ "]," ^ string_of_expression body ^ ")"
 | BinOp(op, lhs, rhs) ->
   let op = (match op with
     | Add -> "Add"

@@ -14,10 +14,13 @@ type values =
 | Unit
 (* closures *)
 
-(** Type of the environment *)
+(** Type of the environment map *)
 type environment = (values EnvironmentMap.t)
 
-(** Type of the heap *)
+(** Type of struct definitions map *)
+type struct_definitions = (struct_types list EnvironmentMap.t)
+
+(** Type of the heap map *)
 type heap = ((values list) HeapMap.t)
 
 (** Exception used by the interpreter *)
@@ -82,25 +85,36 @@ let mset (loc: int) (off: int) (v: values) (h: heap) : heap =
           h |> HeapMap.add loc values_list
 
 (** Evaluates expressions based on an environment and heap *)
-let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * heap = match expr with
+let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (h: heap) : values * heap = match expr with
 | Loc(l) -> (Loc(l, 0), h)
 | Num(n) -> (Num(n), h)
 | Bool(b) -> (Bool(b), h)
 | Unit -> (Unit, h)
+| Struct(id, types, body) ->
+    if List.length types == 0 then
+      raise (InterpreterException "Type list cannot be empty for struct construction!")
+    else if (EnvironmentMap.exists (fun k _ -> String.equal k id) env) || (EnvironmentMap.exists (fun k _ -> String.equal k id) sdef) then
+      raise (InterpreterException "Struct name is already used!")
+    else
+      let sdef = sdef |> EnvironmentMap.add id types in
+        interp body env sdef h
 | Let(id, bound, body) ->
-    let (bound, h) = interp bound env h in
-      let env = env |> EnvironmentMap.add id bound in
-        interp body env h
+    if (EnvironmentMap.exists (fun k _ -> String.equal k id) sdef) then
+      raise (InterpreterException "Let ID already exists as struct name!")
+    else
+      let (bound, h) = interp bound env sdef h in
+        let env = env |> EnvironmentMap.add id bound in
+          interp body env sdef h
 | Id(id) -> (env |> EnvironmentMap.find id, h)
 | Cond(cond, then_body, else_body) ->
-    let (cond, h) = interp cond env h in
+    let (cond, h) = interp cond env sdef h in
       (match cond with
-      | Bool(b) -> if b then interp then_body env h else interp else_body env h
+      | Bool(b) -> if b then interp then_body env sdef h else interp else_body env sdef h
       | _ -> raise (InterpreterException "Cond requires a bool!")
       )
 | BinOp(op, lhs, rhs) ->
-    let (lhs, h) = interp lhs env h in
-      let (rhs, h) = interp rhs env h in
+    let (lhs, h) = interp lhs env sdef h in
+      let (rhs, h) = interp rhs env sdef h in
         (match (op, lhs, rhs) with
         | (Add, Num(lhs), Num(rhs)) -> (Num(lhs + rhs), h)
         | (Sub, Num(lhs), Num(rhs)) -> (Num(lhs - rhs), h)
@@ -125,12 +139,12 @@ let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * he
         | (Or, Bool(lhs), Bool(rhs)) -> (Bool(lhs || rhs), h)
         | _ -> raise (InterpreterException "Unsupported binary operation!")
         )
-| Seq(expr0, expr1) -> let (_, h) = interp expr0 env h in interp expr1 env h
+| Seq(expr0, expr1) -> let (_, h) = interp expr0 env sdef h in interp expr1 env sdef h
 | Malloc(exprs) ->
     let (values_list, h) =
       List.fold_right
         (fun expr (values_list, h) ->
-          let (v, h) = interp expr env h in
+          let (v, h) = interp expr env sdef h in
             (v :: values_list, h))
         exprs
         ([], h)
@@ -138,52 +152,52 @@ let rec interp (expr: Ast.expression) (env: environment) (h: heap) : values * he
         let (loc, h) = malloc values_list h in
           (Loc(loc, 0), h)
 | Mfree(loc) ->
-    let (loc, h) = interp loc env h in
+    let (loc, h) = interp loc env sdef h in
       (match loc with
       | Loc(l, 0) -> (Unit, mfree l h)
       | _ -> raise (InterpreterException "Mfree requires a base location!")
       )
 | Mget(loc) ->
-    let (loc, h) = interp loc env h in
+    let (loc, h) = interp loc env sdef h in
       (match loc with
       | Loc(l, o) -> (mget l o h, h)
       | _ -> raise (InterpreterException "Mget requires a location!")
       )
 | Mset(loc, expr) ->
-    let (loc, h) = interp loc env h in
+    let (loc, h) = interp loc env sdef h in
       (match loc with
       | Loc(l, o) ->
-        let (expr, h) = interp expr env h in
+        let (expr, h) = interp expr env sdef h in
           (Unit, mset l o expr h)
       | _ -> raise (InterpreterException "Mset requires a location!")
       )
 | While(condition, body) ->
-  let (condition, h) = interp condition env h in
+  let (condition, h) = interp condition env sdef h in
     (match condition with
     | Bool(condition) ->
       if condition
-        then let (_, h) = interp body env h in
-          interp expr env h
+        then let (_, h) = interp body env sdef h in
+          interp expr env sdef h
         else (Unit, h)
     | _ -> raise (InterpreterException "While requires a bool!")
     )
 | For(id, start, end_, body) ->
-  let (start, h) = interp start env h in
-    let (end_, h) = interp end_ env h in
+  let (start, h) = interp start env sdef h in
+    let (end_, h) = interp end_ env sdef h in
       let env = env |> EnvironmentMap.add id start in
         (match (start, end_) with
         | (Num(start), Num(end_)) ->
-          let (_, h) = interp body env h in
+          let (_, h) = interp body env sdef h in
             if start == end_ then
               (Unit, h)
             else if start < end_ then
-              interp (For(id, Num(start+1), Num(end_), body)) env h
+              interp (For(id, Num(start+1), Num(end_), body)) env sdef h
             else
-              interp (For(id, Num(start-1), Num(end_), body)) env h
+              interp (For(id, Num(start-1), Num(end_), body)) env sdef h
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
-| Assert(_assertion, command) -> interp command env h
-| Annotation(_notes, expr) -> interp expr env h
+| Assert(_assertion, command) -> interp command env sdef h
+| Annotation(_notes, expr) -> interp expr env sdef h
 
 let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs

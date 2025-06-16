@@ -4,6 +4,7 @@ open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
 
 let env: environment = EnvironmentMap.empty
+let sdef: struct_definitions = EnvironmentMap.empty
 let h: heap = HeapMap.empty
 
 let () = print_endline "Appendix C Verifier"; print_newline ()
@@ -42,7 +43,7 @@ else
       with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e);
       print_newline ();
       print_endline "Result:";
-      let (res, _) = interp prog env h in
+      let (res, _) = interp prog env sdef h in
         match res with
         | Loc(l, o) -> print_string "Loc("; print_int l; print_string ", "; print_int o; print_endline ")"
         | Num(n) -> print_string "Num("; print_int n; print_endline ")"
