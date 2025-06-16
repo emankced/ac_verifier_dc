@@ -34,7 +34,7 @@ type expression =
 | Cond of expression * expression * expression
 | BinOp of binop * expression * expression
 | Seq of expression * expression
-| Malloc of expression list
+| Malloc of string * (expression list)
 | Mset of expression * expression
 | Mget of expression
 | Mfree of expression
@@ -56,9 +56,8 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Loc(l) -> "Loc(" ^ string_of_int l ^ ")"
 | Unit -> "Unit"
 | Struct(name, types, body) -> "Struct(" ^ name ^ ", [" ^
-    List.fold_right (fun t s ->
-      (if String.equal s "" then s else s ^ ", ") ^ string_of_struct_type t
-    ) types "" ^ "]," ^ string_of_expression body ^ ")"
+    List.fold_right (fun t s -> if String.equal s "" then string_of_struct_type t else string_of_struct_type t ^
+    "; " ^ s) types "" ^ "], " ^ string_of_expression body ^ ")"
 | BinOp(op, lhs, rhs) ->
   let op = (match op with
     | Add -> "Add"
@@ -83,11 +82,11 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Let(id, bound, body) -> "Let(\"" ^ id ^ "\", " ^ string_of_expression bound ^ ", " ^ string_of_expression body ^ ")"
 | Cond(cond, then_body, else_body) -> "Cond(" ^ string_of_expression cond ^ ", " ^ string_of_expression then_body ^ ", " ^ string_of_expression else_body ^ ")"
 | Seq(expr0, expr1) -> "Seq(" ^ string_of_expression expr0 ^ ", " ^ string_of_expression expr1 ^ ")"
-| Malloc(exprs) -> "Malloc([" ^ (List.fold_right (fun e s -> if String.equal s "" then string_of_expression e else string_of_expression e ^ "; " ^ s) exprs "") ^ "])"
+| Malloc(id, exprs) -> "Malloc(" ^ id ^ ", [" ^ (List.fold_right (fun e s -> if String.equal s "" then string_of_expression e else string_of_expression e ^ "; " ^ s) exprs "") ^ "])"
 | Mfree(loc) -> "Mfree(" ^ string_of_expression loc ^ ")"
 | Mset(loc, expr) -> "Mset(" ^ string_of_expression loc ^ ", " ^ string_of_expression expr ^ ")"
 | Mget(loc) -> "Mget(" ^ string_of_expression loc ^ ")"
 | For(id, start, end_, body) -> "For(\"" ^ id ^ "\", " ^ string_of_expression start ^ ", " ^ string_of_expression end_ ^ ", " ^ string_of_expression body ^ ")"
 | While(cond, body) -> "While(" ^ string_of_expression cond ^ ", " ^ string_of_expression body ^ ")"
 | Assert(assertion, command) -> "Assert(" ^ string_of_expression assertion ^ ", " ^ string_of_expression command ^ ")"
-| Annotation(notes, expr) -> "Annotation([" ^ List.fold_right (fun (k, v) s -> (if String.equal s "" then "(" else s ^ ", (") ^ k ^ ", " ^ v ^ ")") notes "" ^ "], " ^ string_of_expression expr ^ ")"
+| Annotation(notes, expr) -> "Annotation([" ^ List.fold_right (fun (k, v) s -> (if String.equal s "" then "(" else s ^ "; (") ^ k ^ ", " ^ v ^ ")") notes "" ^ "], " ^ string_of_expression expr ^ ")"

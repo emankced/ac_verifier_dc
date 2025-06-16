@@ -1,12 +1,16 @@
-let sixth := malloc(null, 7) in
-let fifth := malloc(sixth, 3) in
-let fourth := malloc(fifth, 9) in
-let third := malloc(fourth, 1) in
-let second := malloc(third, 5) in
-let first := malloc(second, 6) in
+struct num {int} in
+struct node {node, int} in
+struct node_ref {node} in
 
-let max := malloc(0) in
-let next := malloc(first) in
+let sixth := malloc(node, null, 7) in
+let fifth := malloc(node, sixth, 3) in
+let fourth := malloc(node, fifth, 9) in
+let third := malloc(node, fourth, 1) in
+let second := malloc(node, third, 5) in
+let first := malloc(node, second, 6) in
+
+let max := malloc(num, 0) in
+let next := malloc(node_ref, first) in
   (while !next != null do
     let v := !(!next + 1) in
       (if v > !max then

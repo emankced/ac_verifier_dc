@@ -1,10 +1,12 @@
-let sum := malloc(0) in
-let list := malloc(15, 3, 7, 10, 2, 5) in
+struct num {int} in
+struct array {int, int, int, int, int, int} in
+let sum := malloc(num, 0) in
+let data := malloc(array, 15, 3, 7, 10, 2, 5) in
 let size := 6 in
   (for i in [0 to size-1] do
-    !sum := !sum + !(list + i)
+    !sum := !sum + !(data + i)
   );
   let result := !sum in
-    mfree(list);
+    mfree(data);
     mfree(sum);
     result

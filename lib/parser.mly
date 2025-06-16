@@ -56,6 +56,12 @@ open Ast
 
 %token ASSERT
 
+%token STRUCT
+%token LBRACE
+%token RBRACE
+%token INT
+%token BOOL
+
 %token EOF
 
 %right SEPIMP
@@ -77,17 +83,29 @@ prog:
 | c = command; EOF { c }
 ;
 
+type_:
+| INT { Num }
+| BOOL { Bool }
+| id = ID { LocStruct(id) }
+;
+
+type_list:
+| x = type_; COMMA; xs = type_list { x :: xs }
+| x = type_ { [x] }
+;
+
 command:
 | a = assertion; c = command { Assert(a, c) }
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(cond, then_body, else_body) }
 | IF; cond = expr; THEN; then_body = command { Cond(cond, then_body, Unit) }
 | DEREF; loc = term; ASSIGN; e = expr { Mset(loc, e) }
-| MALLOC; LPARAN; l = expr_list; RPARAN { Malloc(l) }
+| MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(id, l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(e) }
 | WHILE; cond = expr; DO; body = command { While(cond, body) }
 | FOR; id = ID; IN; LBRACKET; start = expr; TO; end_ = expr; RBRACKET; DO; body = command { For(id, start, end_, body) }
 | LPARAN; c = command; RPARAN { c }
+| STRUCT; id = ID; LBRACE; types = type_list; RBRACE; IN; body = command { Struct(id, types, body) }
 | c0 = command; SEMICOLON; c1 = command { Seq(c0, c1) }
 | e = expr { e }
 ;

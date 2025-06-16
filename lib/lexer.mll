@@ -49,5 +49,10 @@ rule read =
   | "&&" { AND }
   | "||" { OR }
   | "not" { NOT }
+  | "struct" { STRUCT }
+  | '{' { LBRACE }
+  | '}' { RBRACE }
+  | "int" { INT }
+  | "bool" { BOOL }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }

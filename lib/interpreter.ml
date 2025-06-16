@@ -140,7 +140,9 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         | _ -> raise (InterpreterException "Unsupported binary operation!")
         )
 | Seq(expr0, expr1) -> let (_, h) = interp expr0 env sdef h in interp expr1 env sdef h
-| Malloc(exprs) ->
+| Malloc(id, exprs) ->
+    (*TODO check that the expression list matches the expected types *)
+    let _expected_types = sdef |> EnvironmentMap.find id in
     let (values_list, h) =
       List.fold_right
         (fun expr (values_list, h) ->

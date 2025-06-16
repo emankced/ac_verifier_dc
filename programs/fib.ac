@@ -1,6 +1,7 @@
-let n := malloc(10) in
-let fib := malloc(0) in
-let fib2 := malloc(1) in
+struct num {int} in
+let n := malloc(num, 10) in
+let fib := malloc(num, 0) in
+let fib2 := malloc(num, 1) in
   (while !n > 0 do
     !n := !n - 1;
     let x := !fib + !fib2 in
