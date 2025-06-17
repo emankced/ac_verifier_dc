@@ -1,6 +1,7 @@
 struct num {int} in
+struct nums {int, int} in
 let n := malloc(num, 10) in
-let fib := malloc(num, 0, 1) in
+let fib := malloc(nums, 0, 1) in
 let fib2 := fib+1 in
   (while !n > 0 do
     !n := !n - 1;

@@ -33,7 +33,7 @@ else
           print_string "Type: ";
           (match tc_res with
           | Null -> print_endline "Null"
-          | Loc(id) -> print_endline ("Loc(" ^ id ^ ")")
+          | Loc(id, offset) -> print_endline ("Loc(" ^ id ^ ", " ^ string_of_int offset ^ ")")
           | Num -> print_endline "Num"
           | Bool -> print_endline "Bool"
           | Unit -> print_endline "Unit"

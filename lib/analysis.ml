@@ -8,7 +8,7 @@ module TypeHeapMap = Map.Make(Int)
 
 type types =
 | Null
-| Loc of string
+| Loc of string * int
 | Num
 | Bool
 | Unit
@@ -26,7 +26,7 @@ exception TypeCheckError of string
 let type_check_id = "type"
 let get_type_id (t: types) : string = match t with
 | Null -> "Null"
-| Loc(id) -> "Loc(" ^ id ^ ")"
+| Loc(id, offset) -> "Loc(" ^ id ^ ", " ^ string_of_int offset ^ ")"
 | Num -> "Num"
 | Bool -> "Bool"
 | Unit -> "Unit"
@@ -47,10 +47,11 @@ let rec type_check (annotation: Ast.expression) (env: type_environment) (sdef: s
           | (Sub, Num, Num) -> Num
           | (Mul, Num, Num) -> Num
           | (Div, Num, Num) -> Num
-          | (Add, Loc(id), Num) -> Loc(id)
-          | (Sub, Loc(id), Num) -> Loc(id)
-          | (Add, Num, Loc(id)) -> Loc(id)
-          | (Sub, Num, Loc(id)) -> Loc(id)
+          (*TODO offset tracking with static number evaluation*)
+          | (Add, Loc(_id, _offset), Num) -> Unknown
+          | (Sub, Loc(_id, _offset), Num) -> Unknown
+          | (Add, Num, Loc(_id, _offset)) -> Unknown
+          | (Sub, Num, Loc(_id, _offset)) -> Unknown
           | (Eq, Num, Num) -> Bool
           | (Ne, Num, Num) -> Bool
           | (Eq, Bool, Bool) -> Bool
@@ -88,10 +89,71 @@ let rec type_check (annotation: Ast.expression) (env: type_environment) (sdef: s
         let sdef = sdef |> TypeEnvironmentMap.add id (List.map (fun (t: struct_types) -> match t with
           | Num -> Num
           | Bool -> Bool
-          | LocStruct(name) -> if String.equal id name || TypeEnvironmentMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")
+          | LocStruct(name) -> if String.equal id name || TypeEnvironmentMap.exists (fun k _ -> String.equal k name) sdef then Loc(name, 0) else raise (TypeCheckError "Struct type does not exists!")
           ) types) in
         let (t, body) = type_check body env sdef in
           (t, Annotation((type_check_id, get_type_id t) :: notes, Struct(id, types, body)))
+  | Malloc(id, exprs) ->
+      let expected_types = TypeEnvironmentMap.find id sdef in
+        let actual_types = List.map (fun e -> let (t, _) = type_check e env sdef in t) exprs in
+        let exprs = List.map (fun e -> let (_, e) = type_check e env sdef in e) exprs in
+        let t = Loc(id, 0) in
+          let rec zip = (fun l0 l1 -> match (l0, l1) with
+            | (x0 :: xs0, x1 :: xs1) -> (x0, x1) :: zip xs0 xs1
+            | ([], []) -> []
+            | _ -> raise (TypeCheckError "Expressions list size does not fit expected type list size!")
+            ) in
+            if List.fold_right (fun (e, a) b -> e == a && b) (zip expected_types actual_types) true then
+              (t, Annotation((type_check_id, get_type_id t) :: notes, Malloc(id, exprs)))
+            else
+              raise (TypeCheckError "The initialising expressions do not fit to the data structure!")
+  | Mfree(loc) ->
+      let (t, loc) = type_check loc env sdef in (match t with
+        | Loc(id, 0) -> if TypeEnvironmentMap.exists (fun k _ -> String.equal id k) sdef then
+              (Unit, Annotation((type_check_id, get_type_id Unit) :: notes, Mfree(loc)))
+            else
+              raise (TypeCheckError "The struct type does not exist!")
+        | _ -> raise (TypeCheckError "Mfree requires a location!")
+        )
+  | Mset(loc, expr) ->
+      let (t, loc) = type_check loc env sdef in (match t with
+        | Loc(id, offset) ->
+            let expected_types = TypeEnvironmentMap.find id sdef in
+            let expected_type = List.nth expected_types offset in
+            let (actual_type, expr) = type_check expr env sdef in
+              if expected_type == actual_type then
+                (Unit, Annotation((type_check_id, get_type_id Unit) :: notes, Mset(loc, expr)))
+              else
+                raise (TypeCheckError "Mset needs the correct type, according to the offset!")
+        | _ -> raise (TypeCheckError "Mset requires a location!")
+        )
+  | Mget(loc) ->
+      let (t, loc) = type_check loc env sdef in (match t with
+        | Loc(id, offset) ->
+            let expected_types = TypeEnvironmentMap.find id sdef in
+            let t = List.nth expected_types offset in
+                (t, Annotation((type_check_id, get_type_id t) :: notes, Mget(loc)))
+        | _ -> raise (TypeCheckError "Mset requires a location!")
+        )
+  | While(cond, body) ->
+      let (t, cond) = type_check cond env sdef in
+        if t == Bool then
+          let (_, body) = type_check body env sdef in
+            (Unit, Annotation((type_check_id, get_type_id Unit) :: notes, While(cond, body)))
+        else
+          raise (TypeCheckError "While requires a bool as condition!")
+  | For(id, start, end_, body) ->
+      let (t, start) = type_check start env sdef in
+        if t == Num then
+          let (t, end_) = type_check end_ env sdef in
+            if t == Num then
+              let env = env |> TypeEnvironmentMap.add id Num in
+              let (_, body) = type_check body env sdef in
+                (Unit, Annotation((type_check_id, get_type_id Unit) :: notes, For(id, start, end_, body)))
+            else
+              raise (TypeCheckError "For requires a number as end parameter!")
+        else
+          raise (TypeCheckError "For requires a number as start parameter!")
   | _ -> raise (TypeCheckError "TODO: implement all cases")
   )
 | _ -> raise (TypeCheckError "Expected Annotation node!")
