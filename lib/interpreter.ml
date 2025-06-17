@@ -86,7 +86,7 @@ let mset (loc: int) (off: int) (v: values) (h: heap) : heap =
 
 (** Evaluates expressions based on an environment and heap *)
 let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (h: heap) : values * heap = match expr with
-| Loc(l) -> (Loc(l, 0), h)
+| Null -> (Loc(0, 0), h)
 | Num(n) -> (Num(n), h)
 | Bool(b) -> (Bool(b), h)
 | Unit -> (Unit, h)

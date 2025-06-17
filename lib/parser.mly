@@ -136,7 +136,7 @@ term:
 | SUB; n = NUM { Num(-n) }
 | TRUE { Bool(true) }
 | FALSE { Bool(false) }
-| NULL { Loc(0) }
+| NULL { Null }
 | NOT; TRUE { Bool(false) }
 | NOT; FALSE { Bool(true) }
 | LPARAN; e = expr; RPARAN { e }
@@ -182,7 +182,7 @@ term_no_deref:
 | SUB; n = NUM { Num(-n) }
 | TRUE { Bool(true) }
 | FALSE { Bool(false) }
-| NULL { Loc(0) }
+| NULL { Null }
 | NOT; TRUE { Bool(false) }
 | NOT; FALSE { Bool(true) }
 | LPARAN; e = expr_no_deref; RPARAN { e }

@@ -29,10 +29,11 @@ else
       print_endline (string_of_expression prog);
       print_newline ();
       (try
-        let (tc_res, prog) = type_check prog TypeEnvironmentMap.empty in
+        let (tc_res, prog) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty in
           print_string "Type: ";
           (match tc_res with
-          | Loc -> print_endline "Loc"
+          | Null -> print_endline "Null"
+          | Loc(id) -> print_endline ("Loc(" ^ id ^ ")")
           | Num -> print_endline "Num"
           | Bool -> print_endline "Bool"
           | Unit -> print_endline "Unit"

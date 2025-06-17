@@ -24,7 +24,7 @@ type struct_types =
 
 (** Expressions as AST *)
 type expression =
-| Loc of int
+| Null
 | Num of int
 | Bool of bool
 | Unit
@@ -53,7 +53,7 @@ let string_of_struct_type (t: struct_types) : string = match t with
 let rec string_of_expression (expr: expression) : string = match expr with
 | Num(n) -> "Num(" ^ string_of_int n ^ ")"
 | Bool(b) -> "Bool(" ^ (if b then "true" else "false") ^ ")"
-| Loc(l) -> "Loc(" ^ string_of_int l ^ ")"
+| Null -> "Null"
 | Unit -> "Unit"
 | Struct(name, types, body) -> "Struct(" ^ name ^ ", [" ^
     List.fold_right (fun t s -> if String.equal s "" then string_of_struct_type t else string_of_struct_type t ^
