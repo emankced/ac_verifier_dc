@@ -24,12 +24,11 @@ else
       !lines
   in
     let prog = parse src in
-    let prog = prepare_annotation prog in
       print_endline "AST:";
       print_endline (string_of_expression prog);
       print_newline ();
       (try
-        let (tc_res, prog) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty in
+        let (tc_res, prog, _tm) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty TypeASTMap.empty in
           print_string "Type: ";
           (match tc_res with
           | Null -> print_endline "Null"

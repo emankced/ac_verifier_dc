@@ -7,28 +7,28 @@ let sdef: struct_definitions = EnvironmentMap.empty
 let h: heap = HeapMap.empty
 
 let%test "Let shadowing test" =
-  let prog = Let("x", Num(5), Let("x", Num(3), Id("x"))) in
+  let prog = Let(0, "x", Num(1, 5), Let(2, "x", Num(3, 3), Id(4, "x"))) in
     let (res, _) = interp prog env sdef h in
       match res with
       | Num(3) -> true
       | _ -> false
 
 let%test "Conditional test" =
-  let prog = Let("x", Bool(false), Cond(Id("x"), Num(42), Num(1337))) in
+  let prog = Let(0, "x", Bool(1, false), Cond(2, Id(3, "x"), Num(4, 42), Num(5, 1337))) in
     let (res, _) = interp prog env sdef h in
       match res with
       | Num(1337) -> true
       | _ -> false
 
 let%test "Simple heap access test" =
-  let prog = Let("x", Struct("nums", [Num; Num], Malloc("nums", [Num(-6); Num(5)])), BinOp(Add, Mget(Id("x")), Mget(BinOp(Add, Id("x"), Num(1))))) in
+  let prog = Let(0, "x", Struct(1, "nums", [Num; Num], Malloc(2, "nums", [Num(3, -6); Num(4, 5)])), BinOp(5, Add, Mget(6, Id(7, "x")), Mget(8, BinOp(9, Add, Id(10, "x"), Num(11, 1))))) in
     let (res, _) = interp prog env sdef h in
       match res with
       | Num(-1) -> true
       | _ -> false
 
 let%test "Invalid heap access test" =
-  let prog = Let("x", Struct("num", [Num], Malloc("num", [Num(3)])), Mget(BinOp(Add, Id("x"), Num(1)))) in
+  let prog = Let(0, "x", Struct(1, "num", [Num], Malloc(2, "num", [Num(3, 3)])), Mget(4, BinOp(5, Add, Id(6, "x"), Num(7, 1)))) in
     try
       ignore (interp prog env sdef h);
       false
@@ -37,14 +37,14 @@ let%test "Invalid heap access test" =
       | _ -> false
 
 let%test "While loop" =
-  let prog = Let("c", Struct("num", [Num], Malloc("num", [Num(0)])), While(BinOp(Lt, Mget(Id("c")), Num(5)), Mset(Id("c"), BinOp(Add, Mget(Id("c")), Num(1))))) in
+  let prog = Let(0, "c", Struct(1, "num", [Num], Malloc(2, "num", [Num(3, 0)])), While(4, BinOp(5, Lt, Mget(6, Id(7, "c")), Num(8, 5)), Mset(9, Id(10, "c"), BinOp(11, Add, Mget(12, Id(13, "c")), Num(14, 1))))) in
     let (_, h) = interp prog env sdef h in
       match HeapMap.find_first (fun _ -> true) h with
       | (_, [Num(5)]) -> true
       | _ -> false
 
 let%test "For loop" =
-  let prog = Let("sum", Struct("num", [Num], Malloc("num", [Num(0)])), For("i", Num(1), Num(5), Mset(Id("sum"), BinOp(Add, Mget(Id("sum")), Id("i"))))) in
+  let prog = Let(0, "sum", Struct(1, "num", [Num], Malloc(2, "num", [Num(3, 0)])), For(4, "i", Num(5, 1), Num(6, 5), Mset(7, Id(8, "sum"), BinOp(9, Add, Mget(10, Id(11, "sum")), Id(12, "i"))))) in
     let (_, h) = interp prog env sdef h in
       match HeapMap.find_first (fun _ -> true) h with
       | (_, [Num(15)]) -> true
