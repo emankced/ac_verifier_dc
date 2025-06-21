@@ -85,15 +85,15 @@ prog:
 | c = command; EOF { c }
 ;
 
+type_list:
+| x = type_; COMMA; xs = type_list { x :: xs }
+| x = type_ { [x] }
+;
+
 type_:
 | INT { Num }
 | BOOL { Bool }
 | id = ID { LocStruct(id) }
-;
-
-type_list:
-| x = type_; COMMA; xs = type_list { x :: xs }
-| x = type_ { [x] }
 ;
 
 command:
