@@ -4,9 +4,9 @@ let sum := malloc(num, 0) in
 let data := malloc(array, 15, 3, 7, 10, 2, 5) in
 let size := 6 in
   (for i in [0 to size-1] do
-    !sum := !sum + !(data + i)
+    !(sum+0) := !(sum+0) + !(data + i)
   );
-  let result := !sum in
+  let result := !(sum+0) in
     mfree(data);
     mfree(sum);
     result

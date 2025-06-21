@@ -2,13 +2,13 @@ struct num {int} in
 let n := malloc(num, 10) in
 let fib := malloc(num, 0) in
 let fib2 := malloc(num, 1) in
-  (while !n > 0 do
-    !n := !n - 1;
-    let x := !fib + !fib2 in
-      !fib2 := !fib;
-      !fib := x
+  (while !(n+0) > 0 do
+    !(n+0) := !(n+0) - 1;
+    let x := !(fib+0) + !(fib2+0) in
+      !(fib2+0) := !(fib+0);
+      !(fib+0) := x
   );
-  let result := !(fib) in
+  let result := !(fib+0) in
     mfree(fib2);
     mfree(fib);
     mfree(n);
