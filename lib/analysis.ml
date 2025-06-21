@@ -8,7 +8,8 @@ module TypeASTMap = Map.Make(Int)
 
 type types =
 | Null
-| Loc of string * int
+| Loc of string
+| LocOffset of string * int
 | Num
 | Bool
 | Unit
@@ -28,7 +29,8 @@ exception TypeCheckError of string
 
 let types_to_string (t: types) : string = match t with
 | Null -> "Null"
-| Loc(id, offset) -> "Loc(" ^ id ^ ", " ^ string_of_int offset ^ ")"
+| Loc(id) -> "Loc(" ^ id ^ ")"
+| LocOffset(id, offset) -> "LocOffset(" ^ id ^ ", " ^ string_of_int offset ^ ")"
 | Num -> "Num"
 | Bool -> "Bool"
 | Unit -> "Unit"
@@ -48,10 +50,14 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         | (Mul, Num, Num) -> Num
         | (Div, Num, Num) -> Num
         (*TODO offset tracking with static number evaluation*)
-        | (Add, Loc(_id, _offset), Num) -> Unknown
-        | (Sub, Loc(_id, _offset), Num) -> Unknown
-        | (Add, Num, Loc(_id, _offset)) -> Unknown
-        | (Sub, Num, Loc(_id, _offset)) -> Unknown
+        | (Add, Loc(id), Num) -> LocOffset(id, 0)
+        | (Sub, Loc(id), Num) -> LocOffset(id, 0)
+        | (Add, Num, Loc(id)) -> LocOffset(id, 0)
+        | (Sub, Num, Loc(id)) -> LocOffset(id, 0)
+        | (Add, LocOffset(_id, _offset), Num) -> Unknown
+        | (Sub, LocOffset(_id, _offset), Num) -> Unknown
+        | (Add, Num, LocOffset(_id, _offset)) -> Unknown
+        | (Sub, Num, LocOffset(_id, _offset)) -> Unknown
         | (Eq, Num, Num) -> Bool
         | (Ne, Num, Num) -> Bool
         | (Eq, Bool, Bool) -> Bool
@@ -93,38 +99,48 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       let sdef = sdef |> TypeEnvironmentMap.add id (List.map (fun (t: struct_types) -> match t with
         | Num -> Num
         | Bool -> Bool
-        | LocStruct(name) -> if String.equal id name || TypeEnvironmentMap.exists (fun k _ -> String.equal k name) sdef then Loc(name, 0) else raise (TypeCheckError "Struct type does not exists!")
+        | LocStruct(name) -> if String.equal id name || TypeEnvironmentMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")
         ) types) in
       let (t, body, tm) = type_check body env sdef tm in
         (t, Struct(i, id, types, body), tm |> TypeASTMap.add i t)
 | Malloc(i, id, exprs) ->
     let expected_types = TypeEnvironmentMap.find id sdef in
-      (*TODO use fold to track tm. calculate only once!*)
       let (actual_types, exprs, tm) = List.fold_right (
         fun e (actual_types, exprs, tm) -> let (t, e, tm) = type_check e env sdef tm in
-          (List.append actual_types [t], List.append exprs [e], tm |> TypeASTMap.add (get_ast_id e) t)
+          (t :: actual_types, List.append exprs [e], tm |> TypeASTMap.add (get_ast_id e) t)
       ) exprs ([], [], tm) in
-      let t = Loc(id, 0) in
+      let t = Loc(id) in
         let rec zip = (fun l0 l1 -> match (l0, l1) with
           | (x0 :: xs0, x1 :: xs1) -> (x0, x1) :: zip xs0 xs1
           | ([], []) -> []
-          | _ -> raise (TypeCheckError "Expressions list size does not fit expected type list size!")
+          | _ -> raise (TypeCheckError ("Expressions list size does not fit expected type list size. Expected " ^ string_of_int (List.length expected_types) ^ ", but got " ^ string_of_int (List.length actual_types)))
           ) in
-          if List.fold_right (fun (e, a) b -> e == a && b) (zip expected_types actual_types) true then
+        let actual_types = List.fold_right (
+          fun (e, a) l ->
+            let t = (match (e, a) with
+            | (Loc(_), Null) -> e
+            | (_, Null) -> raise (TypeCheckError ("FUCK " ^ types_to_string e))
+            | _ -> a
+            ) in
+            t :: l
+          )
+          (zip expected_types actual_types) []
+        in
+          if List.fold_right (fun (e, a) b -> (match (e, a) with (Loc(id_e), Loc(id_a)) -> String.equal id_e id_a | _ -> e == a) && b) (zip expected_types actual_types) true then
             (t, Malloc(i, id, exprs), tm |> TypeASTMap.add i t)
           else
-            raise (TypeCheckError ("The initialising expressions do not fit to the data structure! " ^ types_to_string t))
+            raise (TypeCheckError ("The initialising expressions do not fit to the data structure. Expected: {" ^ (List.fold_right (fun e s -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) expected_types "") ^ "}, but got: {" ^ (List.fold_right (fun e s -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) actual_types "") ^ "}"))
 | Mfree(i, loc) ->
     let (t, loc, tm) = type_check loc env sdef tm in (match t with
-      | Loc(id, 0) -> if TypeEnvironmentMap.exists (fun k _ -> String.equal id k) sdef then
+      | Loc(id) -> if TypeEnvironmentMap.exists (fun k _ -> String.equal id k) sdef then
             (Unit, Mfree(i, loc), tm |> TypeASTMap.add i Unit)
           else
             raise (TypeCheckError "The struct type does not exist!")
-      | _ -> raise (TypeCheckError "Mfree requires a location!")
+      | _ -> raise (TypeCheckError ("Mfree requires a location, but got: " ^ types_to_string t))
       )
-| Mset(i, loc, expr) ->
+| Mset(i, loc, expr) -> (*TODO handle setting Null to a field*)
     let (t, loc, tm) = type_check loc env sdef tm in (match t with
-      | Loc(id, offset) ->
+      | LocOffset(id, offset) ->
           let expected_types = TypeEnvironmentMap.find id sdef in
           let expected_type = List.nth expected_types offset in
           let (actual_type, expr, tm) = type_check expr env sdef tm in
@@ -132,15 +148,15 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
               (Unit, Mset(i, loc, expr), tm |> TypeASTMap.add i Unit)
             else
               raise (TypeCheckError "Mset needs the correct type, according to the offset!")
-      | _ -> raise (TypeCheckError "Mset requires a location!")
+      | _ -> raise (TypeCheckError ("Mset requires a LocOffset, but got: " ^ types_to_string t))
       )
 | Mget(i, loc) ->
     let (t, loc, tm) = type_check loc env sdef tm in (match t with
-      | Loc(id, offset) ->
+      | LocOffset(id, offset) ->
           let expected_types = TypeEnvironmentMap.find id sdef in
           let t = List.nth expected_types offset in
               (t, Mget(i, loc), tm |> TypeASTMap.add i t)
-      | _ -> raise (TypeCheckError "Mset requires a location!")
+      | _ -> raise (TypeCheckError ("Mget requires a LocOffset, but got: " ^ types_to_string t))
       )
 | While(i, cond, body) ->
     let (t, cond, tm) = type_check cond env sdef tm in

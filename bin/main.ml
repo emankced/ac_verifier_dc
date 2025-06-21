@@ -29,15 +29,7 @@ else
       print_newline ();
       (try
         let (tc_res, prog, _tm) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty TypeASTMap.empty in
-          print_string "Type: ";
-          (match tc_res with
-          | Null -> print_endline "Null"
-          | Loc(id, offset) -> print_endline ("Loc(" ^ id ^ ", " ^ string_of_int offset ^ ")")
-          | Num -> print_endline "Num"
-          | Bool -> print_endline "Bool"
-          | Unit -> print_endline "Unit"
-          | Unknown -> print_endline "Unknown"
-          );
+          print_endline ("Type: " ^ types_to_string tc_res);
           print_endline (string_of_expression prog);
           print_newline ();
       with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e);
