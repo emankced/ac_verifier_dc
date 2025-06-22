@@ -1,15 +1,14 @@
-struct num {int} in
-struct nums {int, int} in
+struct num { n: int } in
+struct nums { a: int, b: int} in
 let n := malloc(num, 10) in
 let fib := malloc(nums, 0, 1) in
-let fib2 := fib+1 in
-  (while !(n+0) > 0 do
-    !(n+0) := !(n+0) - 1;
-    let x := !(fib+0) + !fib2 in
-      !fib2 := !(fib+0);
-      !(fib+0) := x
+  (while !n.n > 0 do
+    !n.n := !n.n - 1;
+    let x := !fib.a + !fib.b in
+      !fib.b := !fib.a;
+      !fib.a := x
   );
-  let result := !(fib+0) in
+  let result := !fib.a in
     mfree(fib);
     mfree(n);
     result

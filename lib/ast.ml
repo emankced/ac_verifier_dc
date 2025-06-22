@@ -32,14 +32,14 @@ type expression =
 | Bool of ast_id * bool
 | Unit of ast_id
 | Let of ast_id * string * expression * expression
-| Struct of ast_id * string * (struct_types list) * expression
+| Struct of ast_id * string * ((string * struct_types) list) * expression
 | Id of ast_id * string
 | Cond of ast_id * expression * expression * expression
 | BinOp of ast_id * binop * expression * expression
 | Seq of ast_id * expression * expression
 | Malloc of ast_id * string * (expression list)
-| Mset of ast_id * expression * expression
-| Mget of ast_id * expression
+| Mset of ast_id * expression * string * expression
+| Mget of ast_id * expression * string
 | Mfree of ast_id * expression
 | While of ast_id * expression * expression
 | For of ast_id * string * expression * expression * expression
@@ -58,7 +58,7 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Null(i) -> "Null:" ^ string_of_int i
 | Unit(i) -> "Unit:" ^ string_of_int i
 | Struct(i, name, types, body) -> "Struct:" ^ string_of_int i ^ "(" ^ name ^ ", [" ^
-    List.fold_right (fun t s -> if String.equal s "" then string_of_struct_type t else string_of_struct_type t ^
+    List.fold_right (fun (f, t) s -> if String.equal s "" then f ^ ": " ^ string_of_struct_type t else f ^ ": " ^ string_of_struct_type t ^
     "; " ^ s) types "" ^ "], " ^ string_of_expression body ^ ")"
 | BinOp(i, op, lhs, rhs) ->
   let op = (match op with
@@ -86,8 +86,8 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Seq(i, expr0, expr1) -> "Seq:" ^ string_of_int i ^ "(" ^ string_of_expression expr0 ^ ", " ^ string_of_expression expr1 ^ ")"
 | Malloc(i, id, exprs) -> "Malloc:" ^ string_of_int i ^ "(" ^ id ^ ", [" ^ (List.fold_right (fun e s -> if String.equal s "" then string_of_expression e else string_of_expression e ^ "; " ^ s) exprs "") ^ "])"
 | Mfree(i, loc) -> "Mfree:" ^ string_of_int i ^ "(" ^ string_of_expression loc ^ ")"
-| Mset(i, loc, expr) -> "Mset:" ^ string_of_int i ^ "(" ^ string_of_expression loc ^ ", " ^ string_of_expression expr ^ ")"
-| Mget(i, loc) -> "Mget:" ^ string_of_int i ^ "(" ^ string_of_expression loc ^ ")"
+| Mset(i, loc, field, expr) -> "Mset:" ^ string_of_int i ^ "(" ^ string_of_expression loc ^ ", " ^ field ^ ", " ^ string_of_expression expr ^ ")"
+| Mget(i, loc, field) -> "Mget:" ^ string_of_int i ^ "(" ^ string_of_expression loc ^ ", " ^ field ^ ")"
 | For(i, id, start, end_, body) -> "For:" ^ string_of_int i ^ "(\"" ^ id ^ "\", " ^ string_of_expression start ^ ", " ^ string_of_expression end_ ^ ", " ^ string_of_expression body ^ ")"
 | While(i, cond, body) -> "While:" ^ string_of_int i ^ "(" ^ string_of_expression cond ^ ", " ^ string_of_expression body ^ ")"
 | Assert(i, assertion, command) -> "Assert:" ^ string_of_int i ^ "(" ^ string_of_expression assertion ^ ", " ^ string_of_expression command ^ ")"
@@ -105,8 +105,8 @@ let get_ast_id (expr: expression) : ast_id = match expr with
 | BinOp(i, _, _, _) -> i
 | Seq(i, _, _) -> i
 | Malloc(i, _, _) -> i
-| Mset(i, _, _) -> i
-| Mget(i, _) -> i
+| Mset(i, _, _, _) -> i
+| Mget(i, _, _) -> i
 | Mfree(i, _) -> i
 | While(i, _, _) -> i
 | For(i, _, _, _, _) -> i

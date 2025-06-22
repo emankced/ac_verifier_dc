@@ -8,7 +8,7 @@ module HeapMap = Map.Make(Int)
 
 (** Return values of the interpreter *)
 type values =
-| Loc of int * int (* base location and offset*)
+| Loc of int * string (* base location and type id *)
 | Num of int
 | Bool of bool
 | Unit
@@ -18,7 +18,7 @@ type values =
 type environment = (values EnvironmentMap.t)
 
 (** Type of struct definitions map *)
-type struct_definitions = (struct_types list EnvironmentMap.t)
+type struct_definitions = ((string * struct_types) list EnvironmentMap.t)
 
 (** Type of the heap map *)
 type heap = ((values list) HeapMap.t)
@@ -46,15 +46,20 @@ let malloc (init_values: values list) (h: heap) : int * heap =
 let mfree (loc: int) (h: heap) : heap = h |> HeapMap.remove loc
 
 (** Memory featching from the heap *)
-let mget (loc: int) (off: int) (h: heap) : values =
+let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : values =
   if HeapMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
   else
+    let td = sdef |> EnvironmentMap.find type_id in
+    (match List.find_index (fun (tid, _) -> String.equal tid field) td with
+    | Some off ->
     let values_list = HeapMap.find loc h in
       if off < 0 || off >= List.length values_list then
         raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
       else
         List.nth values_list off
+    | None -> raise (InterpreterException ("mget: field could not be found: " ^ field))
+    )
 
 (** Replace nth element if the type matches *)
 let rec replace_nth (l: values list) (v: values) (n: int) : values list =
@@ -73,20 +78,25 @@ let rec replace_nth (l: values list) (v: values) (n: int) : values list =
         x :: replace_nth xs v (n-1)
 
 (** Memory mutation on the heap *)
-let mset (loc: int) (off: int) (v: values) (h: heap) : heap =
+let mset (loc: int) (field: string) (type_id: string) (v: values) (h: heap) (sdef: struct_definitions) : heap =
   if HeapMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
   else
     let values_list = HeapMap.find loc h in
+    let td = sdef |> EnvironmentMap.find type_id in
+    (match List.find_index (fun (tid, _) -> String.equal tid field) td with
+    | Some off ->
       if off < 0 || off >= List.length values_list then
         raise (InterpreterException ("mget got offset out of range: " ^ string_of_int loc))
       else
         let values_list = replace_nth values_list v off in
           h |> HeapMap.add loc values_list
+    | None -> raise (InterpreterException ("mset: field could not be found: " ^ field))
+    )
 
 (** Evaluates expressions based on an environment and heap *)
 let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (h: heap) : values * heap = match expr with
-| Null(_i) -> (Loc(0, 0), h)
+| Null(_i) -> (Loc(0, ""), h)
 | Num(_i, n) -> (Num(n), h)
 | Bool(_i, b) -> (Bool(b), h)
 | Unit(_i) -> (Unit, h)
@@ -120,16 +130,12 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         | (Sub, Num(lhs), Num(rhs)) -> (Num(lhs - rhs), h)
         | (Mul, Num(lhs), Num(rhs)) -> (Num(lhs * rhs), h)
         | (Div, Num(lhs), Num(rhs)) -> (Num(lhs / rhs), h)
-        | (Add, Loc(l, lhs), Num(rhs)) -> (Loc(l, lhs + rhs), h)
-        | (Sub, Loc(l, lhs), Num(rhs)) -> (Loc(l, lhs - rhs), h)
-        | (Add, Num(lhs), Loc(l, rhs)) -> (Loc(l, lhs + rhs), h)
-        | (Sub, Num(lhs), Loc(l, rhs)) -> (Loc(l, lhs - rhs), h)
         | (Eq, Num(lhs), Num(rhs)) -> (Bool(lhs == rhs), h)
         | (Ne, Num(lhs), Num(rhs)) -> (Bool(lhs != rhs), h)
         | (Eq, Bool(lhs), Bool(rhs)) -> (Bool(lhs == rhs), h)
         | (Ne, Bool(lhs), Bool(rhs)) -> (Bool(lhs != rhs), h)
-        | (Eq, Loc(lhs, olhs), Loc(rhs, orhs)) -> (Bool(lhs == rhs && olhs == orhs), h)
-        | (Ne, Loc(lhs, olhs), Loc(rhs, orhs)) -> (Bool(lhs != rhs || olhs != orhs), h)
+        | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> (Bool(lhs == rhs && String.equal lid rid), h)
+        | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> (Bool(lhs != rhs || not (String.equal lid rid)), h)
         (* should unit get a comparison definition? *)
         | (Le, Num(lhs), Num(rhs)) -> (Bool(lhs <= rhs), h)
         | (Lt, Num(lhs), Num(rhs)) -> (Bool(lhs < rhs), h)
@@ -152,25 +158,26 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         ([], h)
       in
         let (loc, h) = malloc values_list h in
-          (Loc(loc, 0), h)
+          (Loc(loc, id), h)
 | Mfree(_i, loc) ->
     let (loc, h) = interp loc env sdef h in
       (match loc with
-      | Loc(l, 0) -> (Unit, mfree l h)
+      | Loc(l, _id) -> (Unit, mfree l h)
       | _ -> raise (InterpreterException "Mfree requires a base location!")
       )
-| Mget(_i, loc) ->
+| Mget(_i, loc, field) ->
     let (loc, h) = interp loc env sdef h in
       (match loc with
-      | Loc(l, o) -> (mget l o h, h)
+      | Loc(l, id) ->
+            (mget l field id h sdef, h)
       | _ -> raise (InterpreterException "Mget requires a location!")
       )
-| Mset(_i, loc, expr) ->
+| Mset(_i, loc, field, expr) ->
     let (loc, h) = interp loc env sdef h in
       (match loc with
-      | Loc(l, o) ->
+      | Loc(l, id) ->
         let (expr, h) = interp expr env sdef h in
-          (Unit, mset l o expr h)
+          (Unit, mset l field id expr h sdef)
       | _ -> raise (InterpreterException "Mset requires a location!")
       )
 | While(_i, condition, body) ->
@@ -202,7 +209,7 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
 
 let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
-| (Loc(lhs, olhs), Loc(rhs, orhs)) -> lhs == rhs && olhs == orhs
+| (Loc(lhs, lid), Loc(rhs, rid)) -> lhs == rhs && String.equal lid rid
 | (Bool(lhs), Bool(rhs)) -> lhs == rhs
 | (Unit, Unit) -> true
 | _ -> false

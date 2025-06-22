@@ -1,6 +1,6 @@
-struct num {int} in
-struct node {node, int} in
-struct node_ref {node} in
+struct num { n: int } in
+struct node { next: node, data: int } in
+struct node_ref { ref: node } in
 
 let sixth := malloc(node, null, 7) in
 let fifth := malloc(node, sixth, 3) in
@@ -11,20 +11,20 @@ let first := malloc(node, second, 6) in
 
 let max := malloc(num, 0) in
 let next := malloc(node_ref, first) in
-  (while !next != null do
-    let v := !(!next + 1) in
-      (if v > !max then
-        !max := v
+  (while !next.ref != null do
+    let v := !(!next.ref).data in
+      (if v > !max.n then
+        !max.n := v
       );
-    !next := !!next
+    !next.ref := !(!next.ref).next
   );
 
-  let result := !max in
+  let result := !max.n in
     mfree(max);
-    !next := first;
-    (while !next != null do
-      let addr := !next in
-        !next := !!next;
+    !next.ref := first;
+    (while !next.ref != null do
+      let addr := !next.ref in
+        !next.ref := !(!next.ref).next;
         mfree(addr)
     );
     mfree(next);

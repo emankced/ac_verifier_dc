@@ -46,6 +46,7 @@ let get i = let v = !i in i := v+1; v
 %token COMMA
 %token MALLOC
 %token MFREE
+%token DOT
 
 %token SEMICOLON
 
@@ -63,6 +64,7 @@ let get i = let v = !i in i := v+1; v
 %token RBRACE
 %token INT
 %token BOOL
+%token COLON
 
 %token EOF
 
@@ -86,8 +88,8 @@ prog:
 ;
 
 type_list:
-| x = type_; COMMA; xs = type_list { x :: xs }
-| x = type_ { [x] }
+| f = ID; COLON; t = type_; COMMA; xs = type_list { (f, t) :: xs }
+| f = ID; COLON; t = type_ { [(f, t)] }
 ;
 
 type_:
@@ -101,7 +103,7 @@ command:
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(get i, id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(get i, cond, then_body, else_body) }
 | IF; cond = expr; THEN; then_body = command { Cond(get i, cond, then_body, Unit(get i)) }
-| DEREF; loc = term; ASSIGN; e = expr { Mset(get i, loc, e) }
+| DEREF; loc = term; DOT; field = ID; ASSIGN; e = expr { Mset(get i, loc, field, e) }
 | MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(get i, id, l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(get i, e) }
 | WHILE; cond = expr; DO; body = command { While(get i, cond, body) }
@@ -144,7 +146,7 @@ term:
 | LPARAN; e = expr; RPARAN { e }
 | SUB; LPARAN; e = expr; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
 | NOT; LPARAN; e = expr; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
-| DEREF; e = term { Mget(get i, e) }
+| DEREF; loc = term; DOT; field = ID { Mget(get i, loc, field) }
 | SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
 | NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
 | id = ID; { Id(get i, id) }

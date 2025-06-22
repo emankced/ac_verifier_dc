@@ -54,5 +54,7 @@ rule read =
   | '}' { RBRACE }
   | "int" { INT }
   | "bool" { BOOL }
+  | '.' { DOT }
+  | ':' { COLON }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }
