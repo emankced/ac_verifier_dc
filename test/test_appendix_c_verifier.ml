@@ -21,14 +21,14 @@ let%test "Conditional test" =
       | _ -> false
 
 let%test "Simple heap access test" =
-  let prog = Let(0, "x", Struct(1, "nums", [Num; Num], Malloc(2, "nums", [Num(3, -6); Num(4, 5)])), BinOp(5, Add, Mget(6, Id(7, "x")), Mget(8, BinOp(9, Add, Id(10, "x"), Num(11, 1))))) in
+  let prog = Struct(0, "nums", [("a", Num); ("b", Num)], Let(1, "x", Malloc(2, "nums", [Num(3, -6); Num(4, 5)]), BinOp(5, Add, Mget(6, Id(7, "x"), "a"), Mget(8, Id(9, "x"), "b")))) in
     let (res, _) = interp prog env sdef h in
       match res with
       | Num(-1) -> true
       | _ -> false
 
 let%test "Invalid heap access test" =
-  let prog = Let(0, "x", Struct(1, "num", [Num], Malloc(2, "num", [Num(3, 3)])), Mget(4, BinOp(5, Add, Id(6, "x"), Num(7, 1)))) in
+  let prog = Struct(0, "num", [("n", Num)], Let(1, "x", Malloc(2, "num", [Num(3, 3)]), Mget(4, Id(5, "x"), "m"))) in
     try
       ignore (interp prog env sdef h);
       false
@@ -37,14 +37,14 @@ let%test "Invalid heap access test" =
       | _ -> false
 
 let%test "While loop" =
-  let prog = Let(0, "c", Struct(1, "num", [Num], Malloc(2, "num", [Num(3, 0)])), While(4, BinOp(5, Lt, Mget(6, Id(7, "c")), Num(8, 5)), Mset(9, Id(10, "c"), BinOp(11, Add, Mget(12, Id(13, "c")), Num(14, 1))))) in
+  let prog = Struct(0, "num", [("n", Num)], Let(1, "c", Malloc(2, "num", [Num(3, 0)]), While(4, BinOp(5, Lt, Mget(6, Id(7, "c"), "n"), Num(8, 5)), Mset(9, Id(10, "c"), "n", BinOp(11, Add, Mget(12, Id(13, "c"), "n"), Num(14, 1)))))) in
     let (_, h) = interp prog env sdef h in
       match HeapMap.find_first (fun _ -> true) h with
       | (_, [Num(5)]) -> true
       | _ -> false
 
 let%test "For loop" =
-  let prog = Let(0, "sum", Struct(1, "num", [Num], Malloc(2, "num", [Num(3, 0)])), For(4, "i", Num(5, 1), Num(6, 5), Mset(7, Id(8, "sum"), BinOp(9, Add, Mget(10, Id(11, "sum")), Id(12, "i"))))) in
+  let prog = Struct(0, "num", [("n", Num)], Let(1, "sum", Malloc(2, "num", [Num(3, 0)]), For(4, "i", Num(5, 1), Num(6, 5), Mset(7, Id(8, "sum"), "n", BinOp(9, Add, Mget(10, Id(11, "sum"), "n"), Id(12, "i")))))) in
     let (_, h) = interp prog env sdef h in
       match HeapMap.find_first (fun _ -> true) h with
       | (_, [Num(15)]) -> true
@@ -115,15 +115,15 @@ let%test "Parse let and cond" =
   (let (v, _) = (interp (parse "let x := 5 in if x * 5 < 30 != true then 42 else 1337") env sdef h) in v) === Num(1337)
 
 let%test "Parse short cond" =
-  (let (v, _) = (interp (parse "let x := struct num { int } in malloc(num, 5) in (if true then !x := !x + 7); (if false then !x := !x + 3); !x") env sdef h) in v) === Num(12)
+  (let (v, _) = (interp (parse "struct num { n: int } in let x := malloc(num, 5) in (if true then !x.n := !x.n + 7); (if false then !x.n := !x.n + 3); !x.n") env sdef h) in v) === Num(12)
 
 let%test "Parse heap commands" =
-  (let (v, _) = (interp (parse "let x := struct num { int } in malloc(num, 5, 7) in !x := 42; !x") env sdef h) in v) === Num(42) &&
-  (let (v, _) = (interp (parse "let x := struct num { int } in malloc(num, 5, 7) in !x := 42; mfree(x)") env sdef h) in v) === Unit &&
-  (let (v, _) = (interp (parse "let x := struct num { int } in malloc(num, 5, 7) in let a := !x in !(x+1) := a*2; !(x+1)") env sdef h) in v) === Num(10)
+  (let (v, _) = (interp (parse "struct nums { a: int, b: int } in let x := malloc(nums, 5, 7) in !x.a := 42; !x.a") env sdef h) in v) === Num(42) &&
+  (let (v, _) = (interp (parse "struct nums { a: int, b: int } in let x := malloc(nums, 5, 7) in !x.a := 42; mfree(x)") env sdef h) in v) === Unit &&
+  (let (v, _) = (interp (parse "struct nums { a: int, b: int } in let x := malloc(nums, 5, 7) in let a := !x.a in !x.b := a*2; !x.b") env sdef h) in v) === Num(10)
 
 let%test "Parse for loop" =
-  (let (v, _) = (interp (parse "let sum := struct num { int } in malloc(num, 0) in (for i in [1 to 5] do !sum := !sum + i); !sum") env sdef h) in v) === Num(15)
+  (let (v, _) = (interp (parse "struct num { n: int } in let sum := malloc(num, 0) in (for i in [1 to 5] do !sum.n := !sum.n + i); !sum.n") env sdef h) in v) === Num(15)
 
 let%test "Parse while loop" =
-  (let (v, _) = (interp (parse "let sum := struct num { int } in malloc(num, 1) in (while !sum < 20 do !sum := !sum + !sum); !sum") env sdef h) in v) === Num(32)
+  (let (v, _) = (interp (parse "struct num { n: int } in let sum := malloc(num, 1) in (while !sum.n < 20 do !sum.n := !sum.n + !sum.n); !sum.n") env sdef h) in v) === Num(32)
