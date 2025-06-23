@@ -124,7 +124,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
           if List.fold_right (fun (e, a) b -> (match (e, a) with (Loc(id_e), Loc(id_a)) -> String.equal id_e id_a | _ -> e == a) && b) (zip expected_types actual_types) true then
             (t, Malloc(i, id, exprs), tm |> TypeASTMap.add i t)
           else
-            raise (TypeCheckError ("Malloc:" ^ string_of_int i ^ " the initialising expressions do not fit to the data structure. Expected: {" ^ (List.fold_right (fun e s -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) expected_types "") ^ "}, but got: {" ^ (List.fold_right (fun e s -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) actual_types "") ^ "}"))
+            raise (TypeCheckError ("Malloc:" ^ string_of_int i ^ " the initialising expressions do not fit to the data structure. Expected: {" ^ (List.fold_left (fun s e -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) "" expected_types) ^ "}, but got: {" ^ (List.fold_left (fun s e -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) "" actual_types) ^ "}"))
 | Mfree(i, loc) ->
     let (t, loc, tm) = type_check loc env sdef tm in (match t with
       | Loc(id) -> if TypeEnvironmentMap.exists (fun k _ -> String.equal id k) sdef then
