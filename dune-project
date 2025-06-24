@@ -19,7 +19,7 @@
  (name appendix_c_verifier)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml (ppx_inline_test :with-test) menhir)
+ (depends ocaml (ppx_inline_test :with-test) menhir z3)
  (tags
   ("add topics" "to describe" your project)))
 

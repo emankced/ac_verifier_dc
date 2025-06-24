@@ -14,6 +14,7 @@ depends: [
   "ocaml"
   "ppx_inline_test" {with-test}
   "menhir"
+  "z3"
   "odoc" {with-doc}
 ]
 build: [

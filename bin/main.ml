@@ -2,6 +2,9 @@ open Appendix_c_verifier.Ast
 open Appendix_c_verifier.Interpreter
 open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
+open Appendix_c_verifier.Symexec
+
+let () = Printf.printf "Expr: %s\n" res
 
 let env: environment = EnvironmentMap.empty
 let sdef: struct_definitions = EnvironmentMap.empty

@@ -1,5 +1,6 @@
 (library
- (name appendix_c_verifier))
+ (name appendix_c_verifier)
+ (libraries z3))
 
 (menhir
  (modules parser))
