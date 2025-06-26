@@ -4,8 +4,6 @@ open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
 open Appendix_c_verifier.Symexec
 
-let () = Printf.printf "Expr: %s\n" res
-
 let env: environment = EnvironmentMap.empty
 let sdef: struct_definitions = EnvironmentMap.empty
 let h: heap = HeapMap.empty
@@ -38,9 +36,15 @@ else
       with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e);
       print_newline ();
       print_endline "Result:";
-      let (res, _) = interp prog env sdef h in
+      (let (res, _) = interp prog env sdef h in
         match res with
         | Loc(l, t) -> print_string "Loc("; print_int l; print_string ", "; print_string t; print_endline ")"
         | Num(n) -> print_string "Num("; print_int n; print_endline ")"
         | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
         | Unit -> print_endline "Unit"
+      );
+      let sat = (verify prog StringMap.empty) in print_endline (match sat with
+      | UNSATISFIABLE -> "unsatisfiable"
+      | UNKNOWN -> "unknown"
+      | SATISFIABLE -> "staisfiable"
+      )

@@ -58,6 +58,7 @@ let get i = let v = !i in i := v+1; v
 %token RBRACKET
 
 %token ASSERT
+%token RESULT
 
 %token STRUCT
 %token LBRACE
@@ -194,5 +195,6 @@ term_no_deref:
 | NOT; LPARAN; e = expr_no_deref; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
 | SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
 | NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
+| RESULT {Id(get i, "result")}
 | id = ID; { Id(get i, id) }
 ;

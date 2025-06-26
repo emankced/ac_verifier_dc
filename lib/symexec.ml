@@ -1,31 +1,62 @@
+open Ast
+
 let ctx = Z3.mk_context [("proof", "true")]
 
 let int_symbol index = Z3.Symbol.mk_int ctx index
+let string_symbol name = Z3.Symbol.mk_string ctx name
 
 let int_sort = Z3.Arithmetic.Integer.mk_sort ctx
-
-let x = int_symbol 0
-let y = int_symbol 1
-
-let expr = 
-  let lhs = Z3.Expr.mk_const ctx x int_sort in
-  let rhs = Z3.Expr.mk_const ctx y int_sort in
-    Z3.Arithmetic.mk_ge ctx lhs rhs
-
-let expr2 =
-  let lhs = Z3.Expr.mk_numeral_int ctx 6 int_sort in
-  let rhs = Z3.Expr.mk_const ctx x int_sort in
-    Z3.Arithmetic.mk_ge ctx lhs rhs
-
-let expr3 =
-  let lhs = Z3.Expr.mk_numeral_int ctx 9 int_sort in
-  let rhs = Z3.Expr.mk_const ctx y int_sort in
-    Z3.Arithmetic.mk_le ctx lhs rhs
+let bool_sort = Z3.Boolean.mk_sort ctx
 
 let solver = Z3.Solver.mk_simple_solver ctx
-let status = Z3.Solver.check solver [expr; expr2; expr3] (* unsatisfiable example code *)
 
-let res = match status with
-| UNSATISFIABLE -> "unsatisfiable"
-| UNKNOWN -> "unknown"
-| SATISFIABLE -> "staisfiable"
+exception SymbolicExecutionException of string
+
+module StringMap = Map.Make(String)
+type verifcation_env = (Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
+
+let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
+| Num(i, n) ->
+    let sym = int_symbol i in
+    let c = Z3.Expr.mk_const ctx sym int_sort in
+    let v = Z3.Expr.mk_numeral_int ctx n int_sort in
+    let le = Z3.Arithmetic.mk_le ctx c v in
+    let ge = Z3.Arithmetic.mk_ge ctx c v in
+      (Z3.Boolean.mk_and ctx [le; ge], sym, int_sort)
+| BinOp(i, op, lhs, rhs) ->
+    let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env in
+    let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env in
+    let lhs_c = Z3.Expr.mk_const ctx lhs_sym lhs_sort in
+    let rhs_c = Z3.Expr.mk_const ctx rhs_sym rhs_sort in
+    let (v, is_int) =
+      (match op with
+      | Add -> (Z3.Arithmetic.mk_add ctx [lhs_c; rhs_c], true)
+      | Eq ->
+          let le = Z3.Arithmetic.mk_le ctx lhs_c rhs_c in
+          let ge = Z3.Arithmetic.mk_ge ctx lhs_c rhs_c in
+            (Z3.Boolean.mk_and ctx [ge; le], false)
+      | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
+      ) in
+    let sym = int_symbol i in
+    if is_int then
+      let c = Z3.Expr.mk_const ctx sym int_sort in
+      let le = Z3.Arithmetic.mk_le ctx c v in
+      let ge = Z3.Arithmetic.mk_ge ctx c v in
+        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; le; ge], sym, int_sort)
+    else
+      let c = Z3.Expr.mk_const ctx sym bool_sort in
+        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; v; c], sym, bool_sort)
+| Id(_i, id) -> let (sym, sort) = env |> StringMap.find id in
+      (Z3.Boolean.mk_true ctx, sym, sort)
+| _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
+
+let verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
+| Assert(_i, assertion, body) ->
+  (*TODO handle assertion*)
+  let (body_formula, result_sym, result_sort) = derive body env in
+  let env = env |> StringMap.add "result" (result_sym, result_sort) in
+  let (assertion_formula, _, _) = derive assertion env in
+    print_endline ("Z3 AST: " ^ Z3.Expr.to_string assertion_formula);
+    print_endline ("Z3 AST: " ^ Z3.Expr.to_string body_formula);
+    Z3.Solver.check solver [body_formula; assertion_formula]
+| _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")

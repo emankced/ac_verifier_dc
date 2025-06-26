@@ -56,5 +56,6 @@ rule read =
   | "bool" { BOOL }
   | '.' { DOT }
   | ':' { COLON }
+  | "result" { RESULT }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }
