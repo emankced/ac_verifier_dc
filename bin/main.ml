@@ -28,12 +28,12 @@ else
       print_endline "AST:";
       print_endline (string_of_expression prog);
       print_newline ();
-      (try
+      ((*try*)
         let (tc_res, prog, _tm) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty TypeASTMap.empty in
           print_endline ("Type: " ^ types_to_string tc_res);
           print_endline (string_of_expression prog);
           print_newline ();
-      with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e);
+      (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
       print_newline ();
       print_endline "Result:";
       (let (res, _) = interp prog env sdef h in
