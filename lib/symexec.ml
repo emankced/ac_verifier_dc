@@ -48,6 +48,11 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; v; c], sym, bool_sort)
 | Id(_i, id) -> let (sym, sort) = env |> StringMap.find id in
       (Z3.Boolean.mk_true ctx, sym, sort)
+| Let(_i, id, bound, body) ->
+    let (bound, bound_sym, bound_sort) = derive bound env in
+    let env = env |> StringMap.add id (bound_sym, bound_sort) in
+    let (body, body_sym, body_sort) = derive body env in
+      (Z3.Boolean.mk_and ctx [bound; body], body_sym, body_sort)
 | _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
 
 let verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
