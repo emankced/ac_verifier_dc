@@ -176,4 +176,13 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
             raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as end parameter!"))
       else
         raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as start parameter!"))
-| _ -> raise (TypeCheckError "TODO: implement all cases")
+| Assert(i, assertion, body) ->
+    let (t_body, body, tm2) = type_check body env sdef tm in
+    let env = env |> TypeEnvironmentMap.add "result" t_body in
+    let (t_assertion, _, _) = type_check assertion env sdef tm in
+      (match t_assertion with
+      | Bool -> ()
+      | _ -> raise (TypeCheckError ("Assert:" ^ string_of_int i ^ " requires a bool expression as assertion!"))
+      );
+      (t_body, body, tm2)
+(*| _ -> raise (TypeCheckError "TODO: implement all cases")*)
