@@ -18,8 +18,8 @@ type verifcation_env = (Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
 let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
     let sym = int_symbol i in
-    let c = Z3.Expr.mk_const ctx sym int_sort in
-    let v = Z3.Expr.mk_numeral_int ctx n int_sort in
+    let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+    let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
     let le = Z3.Arithmetic.mk_le ctx c v in
     let ge = Z3.Arithmetic.mk_ge ctx c v in
       (Z3.Boolean.mk_and ctx [le; ge], sym, int_sort)
@@ -39,7 +39,7 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
       ) in
     let sym = int_symbol i in
     if is_int then
-      let c = Z3.Expr.mk_const ctx sym int_sort in
+      let c = Z3.Arithmetic.Integer.mk_const ctx sym in
       let le = Z3.Arithmetic.mk_le ctx c v in
       let ge = Z3.Arithmetic.mk_ge ctx c v in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; le; ge], sym, int_sort)
