@@ -66,11 +66,10 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
 
 let verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
 | Assert(_i, assertion, body) ->
-  (*TODO handle assertion*)
   let (body_formula, result_sym, result_sort) = derive body env in
   let env = env |> StringMap.add "result" (result_sym, result_sort) in
   let (assertion_formula, _, _) = derive assertion env in
-    print_endline ("Z3 AST: " ^ Z3.Expr.to_string assertion_formula);
-    print_endline ("Z3 AST: " ^ Z3.Expr.to_string body_formula);
+    print_endline "Z3 assertion AST:"; print_endline (Z3.Expr.to_string assertion_formula); print_newline ();
+    print_endline "Z3 AST: "; print_endline (Z3.Expr.to_string body_formula); print_newline ();
     Z3.Solver.check solver [body_formula; assertion_formula]
 | _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")

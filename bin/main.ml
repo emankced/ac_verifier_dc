@@ -42,7 +42,7 @@ else
         | Num(n) -> print_string "Num("; print_int n; print_endline ")"
         | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
         | Unit -> print_endline "Unit"
-      );
+      ); print_newline ();
       let sat = (verify prog StringMap.empty) in print_endline (match sat with
       | UNSATISFIABLE -> "unsatisfiable"
       | UNKNOWN -> "unknown"
