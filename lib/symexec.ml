@@ -23,6 +23,11 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
     let le = Z3.Arithmetic.mk_le ctx c v in
     let ge = Z3.Arithmetic.mk_ge ctx c v in
       (Z3.Boolean.mk_and ctx [le; ge], sym, int_sort)
+| Bool(i, b) ->
+    let sym = int_symbol i in
+    let c = Z3.Boolean.mk_const ctx sym in
+    let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
+      (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
 | BinOp(i, op, lhs, rhs) ->
     let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env in
     let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env in
@@ -46,8 +51,12 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
     else
       let c = Z3.Expr.mk_const ctx sym bool_sort in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; v; c], sym, bool_sort)
-| Id(_i, id) -> let (sym, sort) = env |> StringMap.find id in
-      (Z3.Boolean.mk_true ctx, sym, sort)
+| Id(i, id) -> let (sym, sort) = env |> StringMap.find id in
+      (match Z3.Sort.get_sort_kind sort with
+      | BOOL_SORT -> (Z3.Boolean.mk_const ctx sym, sym, sort)
+      | INT_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
+      | _ -> raise (SymbolicExecutionException ("Unsupported sort at " ^ string_of_int i  ^ ": " ^ Z3.Sort.to_string sort))
+      )
 | Let(_i, id, bound, body) ->
     let (bound, bound_sym, bound_sort) = derive bound env in
     let env = env |> StringMap.add id (bound_sym, bound_sort) in
