@@ -45,8 +45,9 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
       let eq = Z3.Boolean.mk_eq ctx c v in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, int_sort)
     else
-      let c = Z3.Expr.mk_const ctx sym bool_sort in
-        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; v; c], sym, bool_sort)
+      let c = Z3.Boolean.mk_const ctx sym in
+      let eq = Z3.Boolean.mk_eq ctx c v in
+        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
 | Id(i, id) -> let (sym, sort) = env |> StringMap.find id in
       (match Z3.Sort.get_sort_kind sort with
       | BOOL_SORT -> (Z3.Boolean.mk_const ctx sym, sym, sort)
@@ -65,16 +66,18 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
 | Assert(_i, assertion, body) ->
     let (body_formula, result_sym, result_sort) = derive body env in
     let env = env |> StringMap.add "result" (result_sym, result_sort) in
-    let (assertion_formula, _, _) = derive assertion env in
-      (Z3.Boolean.mk_and ctx [body_formula; assertion_formula], result_sym, result_sort)
+    let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env in
+    let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
+      (Z3.Boolean.mk_and ctx [body_formula; assertion_formula; c], result_sym, result_sort)
 | _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
 
 let verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
 | Assert(_i, assertion, body) ->
   let (body_formula, result_sym, result_sort) = derive body env in
   let env = env |> StringMap.add "result" (result_sym, result_sort) in
-  let (assertion_formula, _, _) = derive assertion env in
+  let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env in
+  let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
     print_endline "Z3 assertion AST:"; print_endline (Z3.Expr.to_string assertion_formula); print_newline ();
     print_endline "Z3 AST: "; print_endline (Z3.Expr.to_string body_formula); print_newline ();
-    Z3.Solver.check solver [body_formula; assertion_formula]
+    Z3.Solver.check solver [body_formula; assertion_formula; c]
 | _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")
