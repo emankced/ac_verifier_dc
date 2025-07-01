@@ -20,9 +20,7 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
     let sym = int_symbol i in
     let c = Z3.Arithmetic.Integer.mk_const ctx sym in
     let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
-    let le = Z3.Arithmetic.mk_le ctx c v in
-    let ge = Z3.Arithmetic.mk_ge ctx c v in
-      (Z3.Boolean.mk_and ctx [le; ge], sym, int_sort)
+      (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
 | Bool(i, b) ->
     let sym = int_symbol i in
     let c = Z3.Boolean.mk_const ctx sym in
@@ -36,18 +34,14 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
     let (v, is_int) =
       (match op with
       | Add -> (Z3.Arithmetic.mk_add ctx [lhs_c; rhs_c], true)
-      | Eq ->
-          let le = Z3.Arithmetic.mk_le ctx lhs_c rhs_c in
-          let ge = Z3.Arithmetic.mk_ge ctx lhs_c rhs_c in
-            (Z3.Boolean.mk_and ctx [ge; le], false)
+      | Eq -> (Z3.Boolean.mk_eq ctx lhs_c rhs_c, false)
       | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
       ) in
     let sym = int_symbol i in
     if is_int then
       let c = Z3.Arithmetic.Integer.mk_const ctx sym in
-      let le = Z3.Arithmetic.mk_le ctx c v in
-      let ge = Z3.Arithmetic.mk_ge ctx c v in
-        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; le; ge], sym, int_sort)
+      let eq = Z3.Boolean.mk_eq ctx c v in
+        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, int_sort)
     else
       let c = Z3.Expr.mk_const ctx sym bool_sort in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; v; c], sym, bool_sort)
