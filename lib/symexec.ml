@@ -71,7 +71,7 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
       (Z3.Boolean.mk_and ctx [body_formula; assertion_formula; c], result_sym, result_sort)
 | _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
 
-let verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
+let rec verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
 | Assert(_i, assertion, body) ->
   let (body_formula, result_sym, result_sort) = derive body env in
   let env = env |> StringMap.add "result" (result_sym, result_sort) in
@@ -80,4 +80,5 @@ let verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match 
     print_endline "Z3 assertion AST:"; print_endline (Z3.Expr.to_string assertion_formula); print_newline ();
     print_endline "Z3 AST: "; print_endline (Z3.Expr.to_string body_formula); print_newline ();
     Z3.Solver.check solver [body_formula; assertion_formula; c]
-| _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")
+| e -> verify (Assert(-2, Bool(-1, true), e)) env
+(*| _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")*)
