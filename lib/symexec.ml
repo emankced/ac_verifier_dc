@@ -35,6 +35,8 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
       (match op with
       | Add -> (Z3.Arithmetic.mk_add ctx [lhs_c; rhs_c], true)
       | Eq -> (Z3.Boolean.mk_eq ctx lhs_c rhs_c, false)
+      | And -> (Z3.Boolean.mk_and ctx [lhs_c; rhs_c], false)
+      | Or -> (Z3.Boolean.mk_or ctx [lhs_c; rhs_c], false)
       | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
       ) in
     let sym = int_symbol i in
