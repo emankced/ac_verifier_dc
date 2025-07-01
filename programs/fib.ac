@@ -8,8 +8,8 @@ let fib2 := malloc(num, 1) in
       !fib2.n := !fib.n;
       !fib.n := x
   );
-  let result := !fib.n in
+  let res := !fib.n in
     mfree(fib2);
     mfree(fib);
     mfree(n);
-    result
+    res

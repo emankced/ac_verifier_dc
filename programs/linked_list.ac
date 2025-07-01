@@ -19,7 +19,7 @@ let next := malloc(node_ref, first) in
     !next.ref := !(!next.ref).next
   );
 
-  let result := !max.n in
+  let res := !max.n in
     mfree(max);
     !next.ref := first;
     (while !next.ref != null do
@@ -29,4 +29,4 @@ let next := malloc(node_ref, first) in
     );
     mfree(next);
 
-    result
+    res
