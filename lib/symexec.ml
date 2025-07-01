@@ -34,7 +34,15 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
     let (v, is_int) =
       (match op with
       | Add -> (Z3.Arithmetic.mk_add ctx [lhs_c; rhs_c], true)
+      | Sub -> (Z3.Arithmetic.mk_sub ctx [lhs_c; rhs_c], true)
+      | Mul -> (Z3.Arithmetic.mk_mul ctx [lhs_c; rhs_c], true)
+      | Div -> (Z3.Arithmetic.mk_div ctx lhs_c rhs_c, true)
       | Eq -> (Z3.Boolean.mk_eq ctx lhs_c rhs_c, false)
+      | Ne -> (Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs_c rhs_c), false)
+      | Le -> (Z3.Arithmetic.mk_le ctx lhs_c rhs_c, false)
+      | Lt -> (Z3.Arithmetic.mk_lt ctx lhs_c rhs_c, false)
+      | Ge -> (Z3.Arithmetic.mk_ge ctx lhs_c rhs_c, false)
+      | Gt -> (Z3.Arithmetic.mk_gt ctx lhs_c rhs_c, false)
       | And -> (Z3.Boolean.mk_and ctx [lhs_c; rhs_c], false)
       | Or -> (Z3.Boolean.mk_or ctx [lhs_c; rhs_c], false)
       | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
