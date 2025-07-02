@@ -79,7 +79,14 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
   | (Bool, cond, tm) ->
       let (lhs, then_body, tm) = type_check then_body env sdef tm in
       let (rhs, else_body, tm) = type_check else_body env sdef tm in
-        if lhs == rhs then (lhs, Cond(i, cond, then_body, else_body), tm |> TypeASTMap.add i lhs)
+      let (t, correct) =
+        (match (lhs, rhs) with
+        | (Loc(_), Null) -> (lhs, true)
+        | (Null, Loc(_)) -> (rhs, true)
+        | (Loc(idl), Loc(idr)) -> (lhs, String.equal idl idr)
+        | (lhs, rhs) -> (lhs, lhs == rhs))
+      in
+        if correct then (t, Cond(i, cond, then_body, else_body), tm |> TypeASTMap.add i t)
         else raise (TypeCheckError ("Cond:" ^ string_of_int i ^ " requires both branches to have the same type!"))
   | _ -> raise (TypeCheckError ("Cond:" ^ string_of_int i ^ " requires a bool as condition!"))
   )
