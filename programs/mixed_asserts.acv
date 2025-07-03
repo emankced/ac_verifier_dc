@@ -1,0 +1,6 @@
+@ result @
+let x := true in
+(let y := 5 in
+    @ result == 12 && y == 5 || (false == true) && false @
+    y + 7);
+x
