@@ -1,0 +1,37 @@
+struct num { n: int } in
+struct node { next: node, data: int } in
+struct node_ref { ref: node } in
+
+let list := malloc(node, null, 0) in
+let list := malloc(node, list, 0) in
+let list := malloc(node, list, 0) in
+let list := malloc(node, list, 0) in
+let list := malloc(node, list, 0) in
+let list := malloc(node, list, 0) in
+let size := 6 in
+
+let next := malloc(node_ref, list) in
+  (for i in [1 to size] do
+    !(!next.ref).data := i;
+    !next.ref := !(!next.ref).next
+  );
+
+  !next.ref := list;
+  let sum := malloc(num, 0) in
+    (for i in [1 to size] do
+      let v := !(!next.ref).data in
+        !sum.n := v + !sum.n;
+        !next.ref := !(!next.ref).next
+    );
+
+    let res := !sum.n in
+      mfree(sum);
+      !next.ref := list;
+      (while !next.ref != null do
+        let addr := !next.ref in
+          !next.ref := !(!next.ref).next;
+          mfree(addr)
+      );
+      mfree(next);
+
+      res

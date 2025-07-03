@@ -2,26 +2,26 @@ struct num { n: int } in
 struct node { next: node, data: int } in
 struct node_ref { ref: node } in
 
-let sixth := malloc(node, null, 7) in
-let fifth := malloc(node, sixth, 3) in
-let fourth := malloc(node, fifth, 9) in
-let third := malloc(node, fourth, 1) in
-let second := malloc(node, third, 5) in
-let first := malloc(node, second, 6) in
+let list := malloc(node, null, 7) in
+let list := malloc(node, list, 3) in
+let list := malloc(node, list, 9) in
+let list := malloc(node, list, 1) in
+let list := malloc(node, list, 5) in
+let list := malloc(node, list, 6) in
 
 let max := malloc(num, 0) in
-let next := malloc(node_ref, first) in
+let next := malloc(node_ref, list) in
   (while !next.ref != null do
     let v := !(!next.ref).data in
       (if v > !max.n then
         !max.n := v
       );
-    !next.ref := !(!next.ref).next
+      !next.ref := !(!next.ref).next
   );
 
   let res := !max.n in
     mfree(max);
-    !next.ref := first;
+    !next.ref := list;
     (while !next.ref != null do
       let addr := !next.ref in
         !next.ref := !(!next.ref).next;
