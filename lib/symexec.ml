@@ -58,7 +58,7 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
 | Id(i, id) -> let (sym, sort) = env |> StringMap.find id in
       (match Z3.Sort.get_sort_kind sort with
-      | BOOL_SORT -> (Z3.Boolean.mk_const ctx sym, sym, sort)
+      | BOOL_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
       | INT_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
       | _ -> raise (SymbolicExecutionException ("Unsupported sort at " ^ string_of_int i  ^ ": " ^ Z3.Sort.to_string sort))
       )
