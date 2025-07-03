@@ -50,7 +50,7 @@ let () = if String.equal "" !input_file then
         print_newline ()));
       (if not !no_type_check then
       (*try*)
-        let (tc_res, _prog, _tm) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty TypeASTMap.empty in
+        let (tc_res, _tm) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty TypeASTMap.empty in
           print_endline ("Type: " ^ types_to_string tc_res);
           print_newline ()
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
