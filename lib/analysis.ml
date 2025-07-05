@@ -1,10 +1,5 @@
 open Ast
-
-(** Map that holds the environment store *)
-module TypeEnvironmentMap = Map.Make(String)
-
-(** Map that holds type information of all AST nodes *)
-module TypeASTMap = Map.Make(Int)
+open Common
 
 type types =
 | Null
@@ -14,14 +9,14 @@ type types =
 | Unit
 | Unknown
 
-(** Type of the environment map *)
-type type_environment = (types TypeEnvironmentMap.t)
+(** Map that holds the environment store *)
+type type_environment = (types StringMap.t)
 
-(** Type of the struct definition map *)
-type struct_type_definitions = ((string * types) list TypeEnvironmentMap.t)
+(** Map that holds the struct definitions *)
+type struct_type_definitions = ((string * types) list StringMap.t)
 
-(** Type of the type map *)
-type ast_types = (types TypeASTMap.t)
+(** Map that holds type information of all AST nodes *)
+type ast_types = (types IntMap.t)
 
 (** Exception used by the type checker *)
 exception TypeCheckError of string
@@ -35,10 +30,10 @@ let types_to_string (t: types) : string = match t with
 | Unknown -> "Unknown"
 
 let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_type_definitions) (tm: ast_types) : types * ast_types = match expr with
-| Null(i) -> (Null, tm |> TypeASTMap.add i Null)
-| Num(i, _) -> (Num, tm |> TypeASTMap.add i Num)
-| Bool(i, _) -> (Bool, tm |> TypeASTMap.add i Bool)
-| Unit(i) -> (Unit, tm |> TypeASTMap.add i Unit)
+| Null(i) -> (Null, tm |> IntMap.add i Null)
+| Num(i, _) -> (Num, tm |> IntMap.add i Num)
+| Bool(i, _) -> (Bool, tm |> IntMap.add i Bool)
+| Unit(i) -> (Unit, tm |> IntMap.add i Unit)
 | BinOp(i, op, lhs, rhs) ->
     let (lhs, tm) = type_check lhs env sdef tm in
       let (rhs, tm) = type_check rhs env sdef tm in
@@ -67,13 +62,13 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         | (And, Bool, Bool) -> Bool
         | (Or, Bool, Bool) -> Bool
         | (_, lhs, rhs) -> raise (TypeCheckError ("BinOp:" ^ string_of_int i ^ " Operator and operands do not match: " ^ types_to_string lhs ^ " and " ^ types_to_string rhs))
-        ) in (t, tm |> TypeASTMap.add i t)
-| Id(i, id) -> let t = env |> TypeEnvironmentMap.find id in (t, tm |> TypeASTMap.add i t)
+        ) in (t, tm |> IntMap.add i t)
+| Id(i, id) -> let t = env |> StringMap.find id in (t, tm |> IntMap.add i t)
 | Let(i, id, bound, body) ->
     let (bound, tm) = type_check bound env sdef tm in
-      let env = env |> TypeEnvironmentMap.add id bound in
+      let env = env |> StringMap.add id bound in
         let (body, tm) = type_check body env sdef tm in
-          (body, tm |> TypeASTMap.add i body)
+          (body, tm |> IntMap.add i body)
 | Cond(i, cond, then_body, else_body) ->
   (match (type_check cond env sdef tm) with
   | (Bool, tm) ->
@@ -86,31 +81,31 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         | (Loc(idl), Loc(idr)) -> (lhs, String.equal idl idr)
         | (lhs, rhs) -> (lhs, lhs == rhs))
       in
-        if correct then (t, tm |> TypeASTMap.add i t)
+        if correct then (t, tm |> IntMap.add i t)
         else raise (TypeCheckError ("Cond:" ^ string_of_int i ^ " requires both branches to have the same type!"))
   | _ -> raise (TypeCheckError ("Cond:" ^ string_of_int i ^ " requires a bool as condition!"))
   )
 | Seq(i, expr0, expr1) ->
     let (_, tm) = type_check expr0 env sdef tm in
       let (t, tm) = type_check expr1 env sdef tm in
-        (t, tm |> TypeASTMap.add i t)
+        (t, tm |> IntMap.add i t)
 | Struct(i, id, types, body) ->
-    if TypeEnvironmentMap.exists (fun k _ -> String.equal id k) sdef || TypeEnvironmentMap.exists (fun k _ -> String.equal id k) env then
+    if StringMap.exists (fun k _ -> String.equal id k) sdef || StringMap.exists (fun k _ -> String.equal id k) env then
       raise (TypeCheckError ("Struct:" ^ string_of_int i ^ " name is already taken!"))
     else
-      let sdef = sdef |> TypeEnvironmentMap.add id (List.map (fun ((tid, t): string * struct_types) -> (tid, match t with
+      let sdef = sdef |> StringMap.add id (List.map (fun ((tid, t): string * struct_types) -> (tid, match t with
         | Num -> Num
         | Bool -> Bool
-        | LocStruct(name) -> if String.equal id name || TypeEnvironmentMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")
+        | LocStruct(name) -> if String.equal id name || StringMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")
         )) types) in
       let (t, tm) = type_check body env sdef tm in
-        (t, tm |> TypeASTMap.add i t)
+        (t, tm |> IntMap.add i t)
 | Malloc(i, id, exprs) ->
-    let expected_types = TypeEnvironmentMap.find id sdef in
+    let expected_types = StringMap.find id sdef in
     let expected_types = List.map (fun (_f, t) -> t) expected_types in
       let (actual_types, tm) = List.fold_right (
         fun e (actual_types, tm) -> let (t, tm) = type_check e env sdef tm in
-          (t :: actual_types, tm |> TypeASTMap.add (get_ast_id e) t)
+          (t :: actual_types, tm |> IntMap.add (get_ast_id e) t)
       ) exprs ([], tm) in
       let t = Loc(id) in
         let rec zip = (fun l0 l1 -> match (l0, l1) with
@@ -129,13 +124,13 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
           (zip expected_types actual_types) []
         in
           if List.fold_right (fun (e, a) b -> (match (e, a) with (Loc(id_e), Loc(id_a)) -> String.equal id_e id_a | _ -> e == a) && b) (zip expected_types actual_types) true then
-            (t, tm |> TypeASTMap.add i t)
+            (t, tm |> IntMap.add i t)
           else
             raise (TypeCheckError ("Malloc:" ^ string_of_int i ^ " the initialising expressions do not fit to the data structure. Expected: {" ^ (List.fold_left (fun s e -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) "" expected_types) ^ "}, but got: {" ^ (List.fold_left (fun s e -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) "" actual_types) ^ "}"))
 | Mfree(i, loc) ->
     let (t, tm) = type_check loc env sdef tm in (match t with
-      | Loc(id) -> if TypeEnvironmentMap.exists (fun k _ -> String.equal id k) sdef then
-            (Unit, tm |> TypeASTMap.add i Unit)
+      | Loc(id) -> if StringMap.exists (fun k _ -> String.equal id k) sdef then
+            (Unit, tm |> IntMap.add i Unit)
           else
             raise (TypeCheckError ("Mfree:" ^ string_of_int i ^ " the struct type does not exist!"))
       | _ -> raise (TypeCheckError ("Mfree:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
@@ -143,7 +138,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
 | Mset(i, loc, field, expr) ->
     let (t, tm) = type_check loc env sdef tm in (match t with
       | Loc(id) ->
-          let expected_types = TypeEnvironmentMap.find id sdef in
+          let expected_types = StringMap.find id sdef in
           let (_f, expected_type) = List.find (fun (f, _) -> String.equal f field) expected_types in
           let (actual_type, tm) = type_check expr env sdef tm in
             if (match (expected_type, actual_type) with
@@ -151,7 +146,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
             | (Loc(_), Null) -> true (* allow assigning null *)
             | (lhs, rhs) -> lhs == rhs
             ) then
-              (Unit, tm |> TypeASTMap.add i Unit)
+              (Unit, tm |> IntMap.add i Unit)
             else
               raise (TypeCheckError ("Mset:" ^ string_of_int i ^ " needs the correct type, according to the field. Expected: " ^ types_to_string expected_type ^ ", but got: " ^ types_to_string actual_type))
       | _ -> raise (TypeCheckError ("Mset:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
@@ -159,16 +154,16 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
 | Mget(i, loc, field) ->
     let (t, tm) = type_check loc env sdef tm in (match t with
       | Loc(id) ->
-          let expected_types = TypeEnvironmentMap.find id sdef in
+          let expected_types = StringMap.find id sdef in
           let (_f, t) = List.find (fun (f, _) -> String.equal f field) expected_types in
-              (t, tm |> TypeASTMap.add i t)
+              (t, tm |> IntMap.add i t)
       | _ -> raise (TypeCheckError ("Mget:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
       )
 | While(i, cond, body) ->
     let (t, tm) = type_check cond env sdef tm in
       if t == Bool then
         let (_, tm) = type_check body env sdef tm in
-          (Unit, tm |> TypeASTMap.add i Unit)
+          (Unit, tm |> IntMap.add i Unit)
       else
         raise (TypeCheckError ("While:" ^ string_of_int i ^ " requires a bool as condition!"))
 | For(i, id, start, end_, body) ->
@@ -176,16 +171,16 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       if t == Num then
         let (t, tm) = type_check end_ env sdef tm in
           if t == Num then
-            let env = env |> TypeEnvironmentMap.add id Num in
+            let env = env |> StringMap.add id Num in
             let (_, tm) = type_check body env sdef tm in
-              (Unit, tm |> TypeASTMap.add i Unit)
+              (Unit, tm |> IntMap.add i Unit)
           else
             raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as end parameter!"))
       else
         raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as start parameter!"))
 | Assert(i, assertion, body) ->
     let (t_body, tm2) = type_check body env sdef tm in
-    let env = env |> TypeEnvironmentMap.add "result" t_body in
+    let env = env |> StringMap.add "result" t_body in
     let (t_assertion, _) = type_check assertion env sdef tm in
       (match t_assertion with
       | Bool -> ()

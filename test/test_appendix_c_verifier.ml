@@ -1,10 +1,11 @@
 open Appendix_c_verifier.Ast
 open Appendix_c_verifier.Interpreter
 open Appendix_c_verifier.Parse
+open Appendix_c_verifier.Common
 
-let env: environment = EnvironmentMap.empty
-let sdef: struct_definitions = EnvironmentMap.empty
-let h: heap = HeapMap.empty
+let env: environment = StringMap.empty
+let sdef: struct_definitions = StringMap.empty
+let h: heap = IntMap.empty
 
 let%test "Let shadowing test" =
   let prog = Let(0, "x", Num(1, 5), Let(2, "x", Num(3, 3), Id(4, "x"))) in
@@ -39,14 +40,14 @@ let%test "Invalid heap access test" =
 let%test "While loop" =
   let prog = Struct(0, "num", [("n", Num)], Let(1, "c", Malloc(2, "num", [Num(3, 0)]), While(4, BinOp(5, Lt, Mget(6, Id(7, "c"), "n"), Num(8, 5)), Mset(9, Id(10, "c"), "n", BinOp(11, Add, Mget(12, Id(13, "c"), "n"), Num(14, 1)))))) in
     let (_, h) = interp prog env sdef h in
-      match HeapMap.find_first (fun _ -> true) h with
+      match IntMap.find_first (fun _ -> true) h with
       | (_, [Num(5)]) -> true
       | _ -> false
 
 let%test "For loop" =
   let prog = Struct(0, "num", [("n", Num)], Let(1, "sum", Malloc(2, "num", [Num(3, 0)]), For(4, "i", Num(5, 1), Num(6, 5), Mset(7, Id(8, "sum"), "n", BinOp(9, Add, Mget(10, Id(11, "sum"), "n"), Id(12, "i")))))) in
     let (_, h) = interp prog env sdef h in
-      match HeapMap.find_first (fun _ -> true) h with
+      match IntMap.find_first (fun _ -> true) h with
       | (_, [Num(15)]) -> true
       | _ -> false
 

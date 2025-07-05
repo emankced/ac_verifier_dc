@@ -3,6 +3,7 @@ open Appendix_c_verifier.Interpreter
 open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
 open Appendix_c_verifier.Symexec
+open Appendix_c_verifier.Common
 
 let () = print_endline "Appendix C Verifier"; print_newline ()
 
@@ -24,9 +25,9 @@ let speclist = [
 let usage_msg = "Usage: " ^ Array.get Sys.argv 0 ^ " <file> [--no-type-check] [--no-verify] [--no-interpret] [--print-ast]"
 let () = Arg.parse speclist anon_fun usage_msg
 
-let env: environment = EnvironmentMap.empty
-let sdef: struct_definitions = EnvironmentMap.empty
-let h: heap = HeapMap.empty
+let env: environment = StringMap.empty
+let sdef: struct_definitions = StringMap.empty
+let h: heap = IntMap.empty
 
 let () = if String.equal "" !input_file then
     (print_endline usage_msg;
@@ -50,7 +51,7 @@ let () = if String.equal "" !input_file then
         print_newline ()));
       (if not !no_type_check then
       (*try*)
-        let (tc_res, _tm) = type_check prog TypeEnvironmentMap.empty TypeEnvironmentMap.empty TypeASTMap.empty in
+        let (tc_res, _tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty in
           print_endline ("Type: " ^ types_to_string tc_res);
           print_newline ()
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));

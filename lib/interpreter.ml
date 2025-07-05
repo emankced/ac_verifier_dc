@@ -1,10 +1,5 @@
 open Ast
-
-(** Map that holds the environment store *)
-module EnvironmentMap = Map.Make(String)
-
-(** Map that holds the heap store *)
-module HeapMap = Map.Make(Int)
+open Common
 
 (** Return values of the interpreter *)
 type values =
@@ -14,14 +9,14 @@ type values =
 | Unit
 (* closures *)
 
-(** Type of the environment map *)
-type environment = (values EnvironmentMap.t)
+(** Map that holds the environment store *)
+type environment = (values StringMap.t)
 
-(** Type of struct definitions map *)
-type struct_definitions = ((string * struct_types) list EnvironmentMap.t)
+(** Map that holds the struct definitions *)
+type struct_definitions = ((string * struct_types) list StringMap.t)
 
-(** Type of the heap map *)
-type heap = ((values list) HeapMap.t)
+(** Map that holds the heap store *)
+type heap = ((values list) IntMap.t)
 
 (** Exception used by the interpreter *)
 exception InterpreterException of string
@@ -32,7 +27,7 @@ let malloc (init_values: values list) (h: heap) : int * heap =
     raise (InterpreterException "malloc cannot allocate nothing")
   else
     let max_available_loc =
-      HeapMap.fold
+      IntMap.fold
         (fun loc values_list previous_max ->
           let size = List.length values_list in
             let loc = loc + size in
@@ -40,20 +35,20 @@ let malloc (init_values: values list) (h: heap) : int * heap =
         h
         0x400000
     in
-      (max_available_loc, h |> HeapMap.add max_available_loc init_values)
+      (max_available_loc, h |> IntMap.add max_available_loc init_values)
 
 (** Memory deallocation on the heap *)
-let mfree (loc: int) (h: heap) : heap = h |> HeapMap.remove loc
+let mfree (loc: int) (h: heap) : heap = h |> IntMap.remove loc
 
 (** Memory featching from the heap *)
 let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : values =
-  if HeapMap.is_empty h then
+  if IntMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
   else
-    let td = sdef |> EnvironmentMap.find type_id in
+    let td = sdef |> StringMap.find type_id in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some off ->
-    let values_list = HeapMap.find loc h in
+    let values_list = IntMap.find loc h in
       if off < 0 || off >= List.length values_list then
         raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
       else
@@ -79,18 +74,18 @@ let rec replace_nth (l: values list) (v: values) (n: int) : values list =
 
 (** Memory mutation on the heap *)
 let mset (loc: int) (field: string) (type_id: string) (v: values) (h: heap) (sdef: struct_definitions) : heap =
-  if HeapMap.is_empty h then
+  if IntMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
   else
-    let values_list = HeapMap.find loc h in
-    let td = sdef |> EnvironmentMap.find type_id in
+    let values_list = IntMap.find loc h in
+    let td = sdef |> StringMap.find type_id in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some off ->
       if off < 0 || off >= List.length values_list then
         raise (InterpreterException ("mget got offset out of range: " ^ string_of_int loc))
       else
         let values_list = replace_nth values_list v off in
-          h |> HeapMap.add loc values_list
+          h |> IntMap.add loc values_list
     | None -> raise (InterpreterException ("mset: field could not be found: " ^ field))
     )
 
@@ -103,19 +98,19 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
 | Struct(_i, id, types, body) ->
     if List.length types == 0 then
       raise (InterpreterException "Type list cannot be empty for struct construction!")
-    else if (EnvironmentMap.exists (fun k _ -> String.equal k id) env) || (EnvironmentMap.exists (fun k _ -> String.equal k id) sdef) then
+    else if (StringMap.exists (fun k _ -> String.equal k id) env) || (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (InterpreterException "Struct name is already used!")
     else
-      let sdef = sdef |> EnvironmentMap.add id types in
+      let sdef = sdef |> StringMap.add id types in
         interp body env sdef h
 | Let(_i, id, bound, body) ->
-    if (EnvironmentMap.exists (fun k _ -> String.equal k id) sdef) then
+    if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (InterpreterException "Let ID already exists as struct name!")
     else
       let (bound, h) = interp bound env sdef h in
-        let env = env |> EnvironmentMap.add id bound in
+        let env = env |> StringMap.add id bound in
           interp body env sdef h
-| Id(_i, id) -> (env |> EnvironmentMap.find id, h)
+| Id(_i, id) -> (env |> StringMap.find id, h)
 | Cond(_i, cond, then_body, else_body) ->
     let (cond, h) = interp cond env sdef h in
       (match cond with
@@ -148,7 +143,7 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
 | Seq(_i, expr0, expr1) -> let (_, h) = interp expr0 env sdef h in interp expr1 env sdef h
 | Malloc(_i, id, exprs) ->
     (*TODO check that the expression list matches the expected types *)
-    let _expected_types = sdef |> EnvironmentMap.find id in
+    let _expected_types = sdef |> StringMap.find id in
     let (values_list, h) =
       List.fold_right
         (fun expr (values_list, h) ->
@@ -193,7 +188,7 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
 | For(i, id, start, end_, body) ->
   let (start, h) = interp start env sdef h in
     let (end_, h) = interp end_ env sdef h in
-      let env = env |> EnvironmentMap.add id start in
+      let env = env |> StringMap.add id start in
         (match (start, end_) with
         | (Num(start), Num(end_)) ->
           let (_, h) = interp body env sdef h in

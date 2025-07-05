@@ -1,4 +1,5 @@
 open Ast
+open Common
 
 let ctx = Z3.mk_context [("proof", "true")]
 
@@ -12,7 +13,6 @@ let solver = Z3.Solver.mk_simple_solver ctx
 
 exception SymbolicExecutionException of string
 
-module StringMap = Map.Make(String)
 type verifcation_env = (Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
 
 let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with

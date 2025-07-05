@@ -1,14 +1,15 @@
 open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
+open Appendix_c_verifier.Common
 
-let env: type_environment = TypeEnvironmentMap.empty
-let sdef: struct_type_definitions = TypeEnvironmentMap.empty
-let tm: ast_types = TypeASTMap.empty
+let env: type_environment = StringMap.empty
+let sdef: struct_type_definitions = StringMap.empty
+let tm: ast_types = IntMap.empty
 
 let%test "Type check arithmetics" =
   let prog = parse "3 + 4 - 1 * 8 / 3 + 1" in
     let (res, tm) = type_check prog env sdef tm in
-      res == Num && (TypeASTMap.fold (fun _ t b -> b && t == Num) tm true)
+      res == Num && (IntMap.fold (fun _ t b -> b && t == Num) tm true)
 
 let%test "Type check arithmetics mismatch" =
   let prog = parse "3 + 4 - 1 * 8 / null + 1" in
