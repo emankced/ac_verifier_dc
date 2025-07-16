@@ -188,3 +188,18 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       );
       (t_body, tm2)
 (*| _ -> raise (TypeCheckError "TODO: implement all cases")*)
+
+exception BoundVariableException of string
+let rec bound_variables (expr: expression): string list = match expr with
+| Num(_, _) -> []
+| Bool(_, _) -> []
+| Null(_) -> []
+| Unit(_) -> []
+| Id(_, id) -> [id]
+| Let(_, _, bound, body) -> List.append (bound_variables bound) (bound_variables body)
+| BinOp(_, _, lhs, rhs) -> List.append (bound_variables lhs) (bound_variables rhs)
+| Seq(_, expr0, expr1) -> List.append (bound_variables expr0) (bound_variables expr1)
+| Cond(_, cond, then_body, else_body) -> List.append (bound_variables cond) (List.append (bound_variables then_body) (bound_variables else_body))
+| Assert(_, assertion, body) -> List.append (bound_variables assertion) (bound_variables body)
+(*| Struct(_, _, _, body) -> bound_variables body*)
+| _ -> raise (BoundVariableException "TODO: not yet implemented")

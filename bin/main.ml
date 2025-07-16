@@ -65,8 +65,8 @@ let () = if String.equal "" !input_file then
           | Unit -> print_endline "Unit"
         ); print_newline ()));
       (if not !no_verify then
-        let sat = (verify prog StringMap.empty) in print_endline (match sat with
-        | UNSATISFIABLE -> "unsatisfiable"
-        | UNKNOWN -> "unknown"
-        | SATISFIABLE -> "staisfiable"
-        ))
+        print_endline (try (let _ = verify prog StringMap.empty [] in "satisfiable") with
+          | Unsatisfiable -> "unsatisfiable"
+          | Unknown -> "unknown"
+        )
+      )

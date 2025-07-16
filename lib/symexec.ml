@@ -1,4 +1,5 @@
 open Ast
+open Analysis
 open Common
 
 let ctx = Z3.mk_context [("proof", "true")]
@@ -13,7 +14,7 @@ let solver = Z3.Solver.mk_simple_solver ctx
 
 exception SymbolicExecutionException of string
 
-type verifcation_env = (Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
+type verifcation_env = (Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
 
 let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
@@ -56,37 +57,47 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
       let c = Z3.Boolean.mk_const ctx sym in
       let eq = Z3.Boolean.mk_eq ctx c v in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
-| Id(i, id) -> let (sym, sort) = env |> StringMap.find id in
+| Id(i, id) -> let (_expr, sym, sort) = env |> StringMap.find id in
       (match Z3.Sort.get_sort_kind sort with
       | BOOL_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
       | INT_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
       | _ -> raise (SymbolicExecutionException ("Unsupported sort at " ^ string_of_int i  ^ ": " ^ Z3.Sort.to_string sort))
       )
-| Let(_i, id, bound, body) ->
-    let (bound, bound_sym, bound_sort) = derive bound env in
-    let env = env |> StringMap.add id (bound_sym, bound_sort) in
-    let (body, body_sym, body_sort) = derive body env in
-      (Z3.Boolean.mk_and ctx [bound; body], body_sym, body_sort)
-| Seq(_i, expr0, expr1) ->
-    let (expr0_formula, _, _) = derive expr0 env in
-    let (expr1_formula, result_sym, result_sort) = derive expr1 env in
-      (Z3.Boolean.mk_and ctx [expr0_formula; expr1_formula], result_sym, result_sort)
-| Assert(_i, assertion, body) ->
-    let (body_formula, result_sym, result_sort) = derive body env in
-    let env = env |> StringMap.add "result" (result_sym, result_sort) in
-    let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env in
-    let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
-      (Z3.Boolean.mk_and ctx [body_formula; assertion_formula; c], result_sym, result_sort)
 | _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
 
-let rec verify (expr: expression) (env: verifcation_env) : Z3.Solver.status = match expr with
+
+exception Unsatisfiable
+exception Unknown
+
+let solve formula = match Z3.Solver.check solver formula with
+| SATISFIABLE -> ()
+| UNSATISFIABLE -> raise Unsatisfiable
+| UNKNOWN -> raise Unknown (* should unknown raise an exception? *)
+
+let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.expr list) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Assert(_i, assertion, body) ->
-  let (body_formula, result_sym, result_sort) = derive body env in
-  let env = env |> StringMap.add "result" (result_sym, result_sort) in
+  let (body_formula, result_sym, result_sort) = verify body env constraints in
+  let env = env |> StringMap.add "result" (body_formula, result_sym, result_sort) in
   let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env in
   let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
-  let formula = Z3.Boolean.mk_and ctx [body_formula; assertion_formula; c] in
-    print_endline "Z3 AST: "; print_endline (Z3.Expr.to_string formula); print_newline ();
-    Z3.Solver.check solver [formula]
-| e -> verify (Assert(-2, Bool(-1, true), e)) env
+    verify body env (assertion_formula :: c :: constraints)
+| Let(_i, id, bound, body) ->
+    let bound_variable_names = bound_variables bound in
+    let (bound, bound_sym, bound_sort) = derive bound env in
+    let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
+      solve (bound :: (List.append variable_definitions constraints));
+      let env = env |> StringMap.add id (bound, bound_sym, bound_sort) in
+        verify body env constraints
+| Seq(_i, expr0, expr1) ->
+    let _ = verify expr0 env constraints in
+      verify expr1 env constraints
+| expr ->
+    let bound_variable_names = bound_variables expr in
+    let (expr, sym, sort) = derive expr env in
+    let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
+    (* TODO consider result here? *)
+    let formula = expr :: (List.append variable_definitions constraints) in
+      solve formula;
+      (expr, sym, sort)
+
 (*| _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")*)
