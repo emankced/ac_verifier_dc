@@ -1,0 +1,9 @@
+@ result == 10 @
+let x := 2 in
+  @ result >= 5 @
+  if x > 4 then
+    @ result < 7 @
+    5
+  else
+    @ result >= 7 @
+    10

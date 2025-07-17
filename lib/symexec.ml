@@ -57,10 +57,10 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
       let c = Z3.Boolean.mk_const ctx sym in
       let eq = Z3.Boolean.mk_eq ctx c v in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
-| Id(i, id) -> let (_expr, sym, sort) = env |> StringMap.find id in
+| Id(i, id) -> let (expr, sym, sort) = env |> StringMap.find id in
       (match Z3.Sort.get_sort_kind sort with
-      | BOOL_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
-      | INT_SORT -> (Z3.Boolean.mk_true ctx, sym, sort)
+      | BOOL_SORT -> (expr, sym, sort)
+      | INT_SORT -> (expr, sym, sort)
       | _ -> raise (SymbolicExecutionException ("Unsupported sort at " ^ string_of_int i  ^ ": " ^ Z3.Sort.to_string sort))
       )
 | _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
@@ -77,8 +77,8 @@ let solve formula = match Z3.Solver.check solver formula with
 let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.expr list) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Assert(_i, assertion, body) ->
   let (body_formula, result_sym, result_sort) = verify body env constraints in
-  let env = env |> StringMap.add "result" (body_formula, result_sym, result_sort) in
-  let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env in
+  let env_with_result = env |> StringMap.add "result" (body_formula, result_sym, result_sort) in
+  let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env_with_result in
   let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
     verify body env (assertion_formula :: c :: constraints)
 | Let(_i, id, bound, body) ->
@@ -91,13 +91,38 @@ let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.e
 | Seq(_i, expr0, expr1) ->
     let _ = verify expr0 env constraints in
       verify expr1 env constraints
+| Cond(i, cond, then_body, else_body) ->
+    let bound_variable_names_cond = bound_variables cond in
+    let bound_variable_names_then = bound_variables then_body in
+    let bound_variable_names_else = bound_variables else_body in
+    let variable_definitions_cond = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_cond in
+    let variable_definitions_then = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_then in
+    let variable_definitions_else = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_else in
+    let (cond, cond_sym, _cond_sort) = derive cond env in
+    let cond_c = Z3.Boolean.mk_const ctx cond_sym in
+      solve (cond :: (List.append variable_definitions_cond constraints));
+      let (then_body, then_sym, then_sort) = verify then_body env constraints in
+      let (else_body, else_sym, else_sort) = verify else_body env constraints in
+      let then_c = Z3.Expr.mk_const ctx then_sym then_sort in
+      let else_c = Z3.Expr.mk_const ctx else_sym else_sort in
+      let sym = int_symbol i in
+      let c = Z3.Expr.mk_const ctx sym then_sort in (* then_sort and else_sort should be the same. If not, then the type checker is to blame *)
+      let formula =
+        Z3.Boolean.mk_ite
+        ctx
+        (Z3.Boolean.mk_and ctx (cond :: cond_c :: variable_definitions_cond))
+        (Z3.Boolean.mk_and ctx (then_body :: (Z3.Boolean.mk_eq ctx c then_c) :: variable_definitions_then))
+        (Z3.Boolean.mk_and ctx (else_body :: (Z3.Boolean.mk_eq ctx c else_c) :: variable_definitions_else))
+      in
+        (*print_endline (Z3.Expr.to_string (Z3.Boolean.mk_and ctx (formula :: constraints)));*)
+        solve (formula :: constraints);
+        (formula, sym, then_sort)
 | expr ->
     let bound_variable_names = bound_variables expr in
     let (expr, sym, sort) = derive expr env in
     let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
-    (* TODO consider result here? *)
-    let formula = expr :: (List.append variable_definitions constraints) in
-      solve formula;
-      (expr, sym, sort)
+    let formula = Z3.Boolean.mk_and ctx (expr :: variable_definitions) in
+      solve (formula :: constraints);
+      (formula, sym, sort)
 
 (*| _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")*)

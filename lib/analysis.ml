@@ -200,6 +200,6 @@ let rec bound_variables (expr: expression): string list = match expr with
 | BinOp(_, _, lhs, rhs) -> List.append (bound_variables lhs) (bound_variables rhs)
 | Seq(_, expr0, expr1) -> List.append (bound_variables expr0) (bound_variables expr1)
 | Cond(_, cond, then_body, else_body) -> List.append (bound_variables cond) (List.append (bound_variables then_body) (bound_variables else_body))
-| Assert(_, assertion, body) -> List.append (bound_variables assertion) (bound_variables body)
+| Assert(_, assertion, body) -> List.append (List.filter (fun s -> not (String.equal s "result")) (bound_variables assertion)) (bound_variables body)
 (*| Struct(_, _, _, body) -> bound_variables body*)
 | _ -> raise (BoundVariableException "TODO: not yet implemented")
