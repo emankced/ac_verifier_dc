@@ -189,17 +189,22 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       (t_body, tm2)
 (*| _ -> raise (TypeCheckError "TODO: implement all cases")*)
 
-exception BoundVariableException of string
-let rec bound_variables (expr: expression): string list = match expr with
-| Num(_, _) -> []
-| Bool(_, _) -> []
-| Null(_) -> []
-| Unit(_) -> []
-| Id(_, id) -> [id]
-| Let(_, _, bound, body) -> List.append (bound_variables bound) (bound_variables body)
-| BinOp(_, _, lhs, rhs) -> List.append (bound_variables lhs) (bound_variables rhs)
-| Seq(_, expr0, expr1) -> List.append (bound_variables expr0) (bound_variables expr1)
-| Cond(_, cond, then_body, else_body) -> List.append (bound_variables cond) (List.append (bound_variables then_body) (bound_variables else_body))
-| Assert(_, assertion, body) -> List.append (List.filter (fun s -> not (String.equal s "result")) (bound_variables assertion)) (bound_variables body)
-(*| Struct(_, _, _, body) -> bound_variables body*)
-| _ -> raise (BoundVariableException "TODO: not yet implemented")
+(** Collects all used bound variable names of an expression *)
+let rec bound_variables (expr: expression): StringSet.t = match expr with
+| Num(_, _) -> StringSet.empty
+| Bool(_, _) -> StringSet.empty
+| Null(_) -> StringSet.empty
+| Unit(_) -> StringSet.empty
+| Id(_, id) -> StringSet.add id StringSet.empty
+| Let(_, _, bound, body) -> StringSet.union (bound_variables bound) (bound_variables body)
+| BinOp(_, _, lhs, rhs) -> StringSet.union (bound_variables lhs) (bound_variables rhs)
+| Seq(_, expr0, expr1) -> StringSet.union (bound_variables expr0) (bound_variables expr1)
+| Cond(_, cond, then_body, else_body) -> StringSet.union (bound_variables cond) (StringSet.union (bound_variables then_body) (bound_variables else_body))
+| Assert(_, assertion, body) -> StringSet.union (StringSet.filter (fun s -> not (String.equal s "result")) (bound_variables assertion)) (bound_variables body)
+| Struct(_, _, _, body) -> bound_variables body
+| Malloc(_, _, exprs) -> List.fold_right (fun e set -> StringSet.union set (bound_variables e)) exprs StringSet.empty
+| Mfree(_, loc) -> bound_variables loc
+| Mset(_, loc, _field, expr) -> StringSet.union (bound_variables loc) (bound_variables expr)
+| Mget(_, loc, _field) -> bound_variables loc
+| For(_, _, start, end_, body) -> StringSet.union (bound_variables start) (StringSet.union (bound_variables end_) (bound_variables body))
+| While(_, cond, body) -> StringSet.union (bound_variables cond) (bound_variables body)

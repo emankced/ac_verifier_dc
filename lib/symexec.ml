@@ -82,7 +82,7 @@ let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.e
   let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
     verify body env (assertion_formula :: c :: constraints)
 | Let(_i, id, bound, body) ->
-    let bound_variable_names = bound_variables bound in
+    let bound_variable_names = StringSet.to_list (bound_variables bound) in
     let (bound, bound_sym, bound_sort) = derive bound env in
     let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
       solve (bound :: (List.append variable_definitions constraints));
@@ -92,9 +92,9 @@ let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.e
     let _ = verify expr0 env constraints in
       verify expr1 env constraints
 | Cond(i, cond, then_body, else_body) ->
-    let bound_variable_names_cond = bound_variables cond in
-    let bound_variable_names_then = bound_variables then_body in
-    let bound_variable_names_else = bound_variables else_body in
+    let bound_variable_names_cond = StringSet.to_list (bound_variables cond) in
+    let bound_variable_names_then = StringSet.to_list (bound_variables then_body) in
+    let bound_variable_names_else = StringSet.to_list (bound_variables else_body) in
     let variable_definitions_cond = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_cond in
     let variable_definitions_then = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_then in
     let variable_definitions_else = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_else in
@@ -118,7 +118,7 @@ let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.e
         solve (formula :: constraints);
         (formula, sym, then_sort)
 | expr ->
-    let bound_variable_names = bound_variables expr in
+    let bound_variable_names = StringSet.to_list (bound_variables expr) in
     let (expr, sym, sort) = derive expr env in
     let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
     let formula = Z3.Boolean.mk_and ctx (expr :: variable_definitions) in
