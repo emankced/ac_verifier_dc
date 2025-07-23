@@ -14,9 +14,10 @@ let solver = Z3.Solver.mk_simple_solver ctx
 
 exception SymbolicExecutionException of string
 
-type verifcation_env = (Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
+type verification_env = (Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
+type verification_heap = ((Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort) list) IntMap.t
 
-let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
+let rec derive (expr: expression) (env: verification_env) (h: verification_heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
     let sym = int_symbol i in
     let c = Z3.Arithmetic.Integer.mk_const ctx sym in
@@ -28,8 +29,8 @@ let rec derive (expr: expression) (env: verifcation_env) : Z3.Expr.expr * Z3.Sym
     let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
       (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
 | BinOp(i, op, lhs, rhs) ->
-    let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env in
-    let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env in
+    let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env h in
+    let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env h in
     let lhs_c = Z3.Expr.mk_const ctx lhs_sym lhs_sort in
     let rhs_c = Z3.Expr.mk_const ctx rhs_sym rhs_sort in
     let (v, is_int) =
@@ -74,23 +75,23 @@ let solve formula = match Z3.Solver.check solver formula with
 | UNSATISFIABLE -> raise Unsatisfiable
 | UNKNOWN -> raise Unknown (* should unknown raise an exception? *)
 
-let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.expr list) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
+let rec verify (expr: expression) (env: verification_env) (h: verification_heap) (constraints: Z3.Expr.expr list) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Assert(_i, assertion, body) ->
-  let (body_formula, result_sym, result_sort) = verify body env constraints in
+  let (body_formula, result_sym, result_sort) = verify body env h constraints in
   let env_with_result = env |> StringMap.add "result" (body_formula, result_sym, result_sort) in
-  let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env_with_result in
+  let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env_with_result h in
   let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
-    verify body env (assertion_formula :: c :: constraints)
+    verify body env h (assertion_formula :: c :: constraints)
 | Let(_i, id, bound, body) ->
     let bound_variable_names = StringSet.to_list (bound_variables bound) in
-    let (bound, bound_sym, bound_sort) = derive bound env in
+    let (bound, bound_sym, bound_sort) = derive bound env h in
     let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
       solve (bound :: (List.append variable_definitions constraints));
       let env = env |> StringMap.add id (bound, bound_sym, bound_sort) in
-        verify body env constraints
+        verify body env h constraints
 | Seq(_i, expr0, expr1) ->
-    let _ = verify expr0 env constraints in
-      verify expr1 env constraints
+    let _ = verify expr0 env h constraints in
+      verify expr1 env h constraints
 | Cond(i, cond, then_body, else_body) ->
     let bound_variable_names_cond = StringSet.to_list (bound_variables cond) in
     let bound_variable_names_then = StringSet.to_list (bound_variables then_body) in
@@ -98,11 +99,11 @@ let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.e
     let variable_definitions_cond = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_cond in
     let variable_definitions_then = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_then in
     let variable_definitions_else = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_else in
-    let (cond, cond_sym, _cond_sort) = derive cond env in
+    let (cond, cond_sym, _cond_sort) = derive cond env h in
     let cond_c = Z3.Boolean.mk_const ctx cond_sym in
       solve (cond :: (List.append variable_definitions_cond constraints));
-      let (then_body, then_sym, then_sort) = verify then_body env constraints in
-      let (else_body, else_sym, else_sort) = verify else_body env constraints in
+      let (then_body, then_sym, then_sort) = verify then_body env h constraints in
+      let (else_body, else_sym, else_sort) = verify else_body env h constraints in
       let then_c = Z3.Expr.mk_const ctx then_sym then_sort in
       let else_c = Z3.Expr.mk_const ctx else_sym else_sort in
       let sym = int_symbol i in
@@ -119,7 +120,7 @@ let rec verify (expr: expression) (env: verifcation_env) (constraints: Z3.Expr.e
         (formula, sym, then_sort)
 | expr ->
     let bound_variable_names = StringSet.to_list (bound_variables expr) in
-    let (expr, sym, sort) = derive expr env in
+    let (expr, sym, sort) = derive expr env h in
     let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
     let formula = Z3.Boolean.mk_and ctx (expr :: variable_definitions) in
       solve (formula :: constraints);

@@ -2,12 +2,13 @@ open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Symexec
 open Appendix_c_verifier.Common
 
-let env: verifcation_env = StringMap.empty
+let env: verification_env = StringMap.empty
+let h: verification_heap = IntMap.empty
 let constraints: Z3.Expr.expr list = []
 
 let vf (src: string): bool =
   let prog = parse src in
-    try (let _ = verify prog env constraints in true) with
+    try (let _ = verify prog env h constraints in true) with
     | _ -> false
 
 let%test "Verify arithmetics with itself 1" =
