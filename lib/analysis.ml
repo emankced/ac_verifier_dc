@@ -93,7 +93,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
     if StringMap.exists (fun k _ -> String.equal id k) sdef || StringMap.exists (fun k _ -> String.equal id k) env then
       raise (TypeCheckError ("Struct:" ^ string_of_int i ^ " name is already taken!"))
     else
-      let sdef = sdef |> StringMap.add id (List.map (fun ((tid, t): string * struct_types) -> (tid, match t with
+      let sdef = sdef |> StringMap.add id (List.map (fun ((tid, t): string * struct_type) -> (tid, match t with
         | Num -> Num
         | Bool -> Bool
         | LocStruct(name) -> if String.equal id name || StringMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")

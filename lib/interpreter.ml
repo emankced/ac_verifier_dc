@@ -2,7 +2,7 @@ open Ast
 open Common
 
 (** Return values of the interpreter *)
-type values =
+type value =
 | Loc of int * string (* base location and type id *)
 | Num of int
 | Bool of bool
@@ -10,19 +10,19 @@ type values =
 (* closures *)
 
 (** Map that holds the environment store *)
-type environment = (values StringMap.t)
+type environment = (value StringMap.t)
 
 (** Map that holds the struct definitions *)
-type struct_definitions = ((string * struct_types) list StringMap.t)
+type struct_definitions = ((string * struct_type) list StringMap.t)
 
 (** Map that holds the heap store *)
-type heap = ((values list) IntMap.t)
+type heap = ((value list) IntMap.t)
 
 (** Exception used by the interpreter *)
 exception InterpreterException of string
 
 (** Memory allocation on the heap *)
-let malloc (init_values: values list) (h: heap) : int * heap =
+let malloc (init_values: value list) (h: heap) : int * heap =
   if List.length init_values == 0 then
     raise (InterpreterException "malloc cannot allocate nothing")
   else
@@ -41,7 +41,7 @@ let malloc (init_values: values list) (h: heap) : int * heap =
 let mfree (loc: int) (h: heap) : heap = h |> IntMap.remove loc
 
 (** Memory featching from the heap *)
-let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : values =
+let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : value =
   if IntMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
   else
@@ -57,7 +57,7 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
     )
 
 (** Replace nth element if the type matches *)
-let rec replace_nth (l: values list) (v: values) (n: int) : values list =
+let rec replace_nth (l: value list) (v: value) (n: int) : value list =
   match l with
   | [] -> []
   | (x :: xs) ->
@@ -73,7 +73,7 @@ let rec replace_nth (l: values list) (v: values) (n: int) : values list =
         x :: replace_nth xs v (n-1)
 
 (** Memory mutation on the heap *)
-let mset (loc: int) (field: string) (type_id: string) (v: values) (h: heap) (sdef: struct_definitions) : heap =
+let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) : heap =
   if IntMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
   else
@@ -90,7 +90,7 @@ let mset (loc: int) (field: string) (type_id: string) (v: values) (h: heap) (sde
     )
 
 (** Evaluates expressions based on an environment and heap *)
-let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (h: heap) : values * heap = match expr with
+let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (h: heap) : value * heap = match expr with
 | Null(_i) -> (Loc(0, ""), h)
 | Num(_i, n) -> (Num(n), h)
 | Bool(_i, b) -> (Bool(b), h)
@@ -202,11 +202,11 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         )
 | Assert(_i, _assertion, command) -> interp command env sdef h
 
-let (===) (lhs: values) (rhs: values) : bool = match (lhs, rhs) with
+let (===) (lhs: value) (rhs: value) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
 | (Loc(lhs, lid), Loc(rhs, rid)) -> lhs == rhs && String.equal lid rid
 | (Bool(lhs), Bool(rhs)) -> lhs == rhs
 | (Unit, Unit) -> true
 | _ -> false
 
-let (!==) (lhs: values) (rhs: values) : bool = not (lhs === rhs)
+let (!==) (lhs: value) (rhs: value) : bool = not (lhs === rhs)

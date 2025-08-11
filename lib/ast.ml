@@ -17,7 +17,7 @@ type binop =
 | PointsTo
 
 (** Types used creating a struct *)
-type struct_types =
+type struct_type =
 | Num
 | Bool
 | LocStruct of string
@@ -32,7 +32,7 @@ type expression =
 | Bool of ast_id * bool
 | Unit of ast_id
 | Let of ast_id * string * expression * expression
-| Struct of ast_id * string * ((string * struct_types) list) * expression
+| Struct of ast_id * string * ((string * struct_type) list) * expression
 | Id of ast_id * string
 | Cond of ast_id * expression * expression * expression
 | BinOp of ast_id * binop * expression * expression
@@ -47,7 +47,7 @@ type expression =
 (* functions *)
 (* recursive let *)
 
-let string_of_struct_type (t: struct_types) : string = match t with
+let string_of_struct_type (t: struct_type) : string = match t with
 | Num -> "Num"
 | Bool -> "Bool"
 | LocStruct(id) -> "LocStruct(" ^ id ^ ")"
