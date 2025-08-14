@@ -47,23 +47,23 @@ type proof_tree =
 | Impl of expression * (proof_tree list) * environment * heap * struct_definitions
 (*| Derived of Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort*)
 
-let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): value * heap * (proof_tree list) = match expr with
-| Num(_i, n) -> (Num(n), h, [])
-| Bool(_i, b) -> (Bool(b), h, [])
-| Null(_i) -> (Loc(0, ""), h, [])
+let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): (value * heap * (proof_tree list)) list = match expr with
+| Num(_i, n) -> [(Num(n), h, [])]
+| Bool(_i, b) -> [(Bool(b), h, [])]
+| Null(_i) -> [(Loc(0, ""), h, [])]
 | Let(_i, id, bound, body) ->
     (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (SymbolicExecutionException "Let ID already exists as struct name!")
     else
-      let (bound, h, l_bound) = symexec bound env sdef h in
+      let (bound, h, l_bound) = List.hd (symexec bound env sdef h) in (* TODO handle multiple bound values *)
       let env = env |> StringMap.add id bound in
-      let (body, h, l_body) = symexec body env sdef h in
-        (body, h, (List.append l_bound l_body))
-| Id(_i, id) -> (env |> StringMap.find id, h, [])
+      let bodies = symexec body env sdef h in
+        List.map (fun (body, h, l_body) -> (body, h, (List.append l_bound l_body))) bodies
+| Id(_i, id) -> [(env |> StringMap.find id, h, [])]
 | BinOp(_i, op, lhs, rhs) ->
-    let (lhs, h, l_lhs) = symexec lhs env sdef h in
-      let (rhs, h, l_rhs) = symexec rhs env sdef h in
+    let (lhs, h, l_lhs) = List.hd (symexec lhs env sdef h) in (* TODO handle lists *)
+      let (rhs, h, l_rhs) = List.hd (symexec rhs env sdef h) in
       let v =
         (match (op, lhs, rhs) with
         | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
@@ -86,29 +86,19 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
         | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
         )
       in
-        (v, h, List.append l_lhs l_rhs)
+        [(v, h, List.append l_lhs l_rhs)]
 | Assert(_i, assertion, command) ->
     let proof_node = Assert(assertion, command, env, h, sdef) in
-    let (v, h, l) = symexec command env sdef h in
-      (v, h, proof_node :: l)
+    let commands = symexec command env sdef h in
+      List.map (fun (v, h, l) -> (v, h, proof_node :: l)) commands
 | Cond(_i, cond, then_body, else_body) ->
-    let (then_v, _then_h, then_l) = symexec then_body env sdef h in
-    let (else_v, _else_h, else_l) = symexec else_body env sdef h in
+    let (then_v, then_h, then_l) = List.hd (symexec then_body env sdef h) in (* TODO support lists *)
+    let (else_v, else_h, else_l) = List.hd (symexec else_body env sdef h) in
     let then_node = Impl(cond, then_l, env, h, sdef) in
     let else_node = Impl((BinOp(-1, Eq, cond, Bool(-2, false))), else_l, env, h, sdef) in
-    let v = (match (then_v, else_v) with
-    | (Num(tn), Num(en)) -> if tn == en then Num(tn) else InvalidatedNum
-    | (InvalidatedNum, _) -> InvalidatedNum
-    | (_, InvalidatedNum) -> InvalidatedNum
-    | (Bool(tn), Bool(en)) -> if tn == en then Bool(tn) else InvalidatedBool
-    | (InvalidatedBool, _) -> InvalidatedBool
-    | (_, InvalidatedBool) -> InvalidatedBool
-    | (Unit, Unit) -> Unit
-    | _ -> raise (SymbolicExecutionException "symexec Cond does not support all value types (yet?)")
-    ) in
       (* TODO invalidate h entries properly *)
-      (v, h, [then_node; else_node])
-| _ -> (Unit, IntMap.empty, [])
+      [(then_v, then_h, [then_node]); (else_v, else_h, [else_node])]
+| _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 
 let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
@@ -164,15 +154,21 @@ let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * 
 | _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
 
 let verify (expr: expression) =
-  let (_, _, proof_nodes) = symexec expr StringMap.empty StringMap.empty IntMap.empty in
+  let all_symexecs = symexec expr StringMap.empty StringMap.empty IntMap.empty in
+  let proof_nodes = List.fold_left (fun l (_, _, n) -> List.append n l) [] all_symexecs in
   let solve_node (n: proof_tree) = (
     match n with
     | Assert(assertion, command, env, h, sdef) ->
-      let (result, _, _) = symexec command env sdef h in
-      let (assertion, assertion_sym, assertion_sort) = derive assertion (env |> StringMap.add "result" result) h in
-        let assertion_c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
-        print_endline (Z3.Expr.to_string assertion);
-        solve [assertion; assertion_c]
+      let results = symexec command env sdef h in
+      let rec process (results: (value * heap * (proof_tree list)) list) = (match results with
+      | ((result, _, _)::xs) ->
+          let (assertion, assertion_sym, assertion_sort) = derive assertion (env |> StringMap.add "result" result) h in
+          let assertion_c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
+          print_endline (Z3.Expr.to_string assertion);
+          solve [assertion; assertion_c];
+          process xs
+      | [] -> ()) in
+        process results
     | Impl(_lhs, rhs, _env, _h, _sdef) ->
       let check_all_rhs rhs = (match rhs with
       | (_x::_xs) -> raise (SymbolicExecutionException "TODO: Verify does not solve implications (yet?)")
