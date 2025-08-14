@@ -1,5 +1,5 @@
 open Ast
-open Analysis
+(*open Analysis*)
 open Common
 
 let ctx = Z3.mk_context [("proof", "true")]
@@ -14,10 +14,89 @@ let solver = Z3.Solver.mk_simple_solver ctx
 
 exception SymbolicExecutionException of string
 
-type verification_env = (Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort) StringMap.t
-type verification_heap = ((Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort) list) IntMap.t
+exception Unsatisfiable
+exception Unknown
 
-let rec derive (expr: expression) (env: verification_env) (h: verification_heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
+let solve formula = match Z3.Solver.check solver formula with
+| SATISFIABLE -> ()
+| UNSATISFIABLE -> raise Unsatisfiable
+| UNKNOWN -> raise Unknown (* should unknown raise an exception? *)
+
+
+(** Interpretation values used in the symbolic execution *)
+type value =
+| Num of int
+| Bool of bool
+| Loc of int * string
+| InvalidatedNum
+| InvalidatedBool
+| InvalidatedLoc of string
+| Unit
+
+(** Map that holds the environment store *)
+type environment = (value StringMap.t)
+
+(** Map that holds the struct definitions *)
+type struct_definitions = ((string * struct_type) list StringMap.t)
+
+(** Map that holds the heap store *)
+type heap = ((value list) IntMap.t)
+
+type proof_tree =
+| Rules of proof_tree list
+| Assert of expression * expression * environment * heap * struct_definitions
+| Impl of proof_tree * proof_tree
+| Unprocessed of expression
+(*| Derived of Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort*)
+
+let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): value * heap * (proof_tree list) = match expr with
+| Num(_i, n) -> (Num(n), h, [])
+| Bool(_i, b) -> (Bool(b), h, [])
+| Null(_i) -> (Loc(0, ""), h, [])
+| Let(_i, id, bound, body) ->
+    (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
+    if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
+      raise (SymbolicExecutionException "Let ID already exists as struct name!")
+    else
+      let (bound, h, l_bound) = symexec bound env sdef h in
+      let env = env |> StringMap.add id bound in
+      let (body, h, l_body) = symexec body env sdef h in
+        (body, h, (List.append l_bound l_body))
+| Id(_i, id) -> (env |> StringMap.find id, h, [])
+| BinOp(_i, op, lhs, rhs) ->
+    let (lhs, h, l_lhs) = symexec lhs env sdef h in
+      let (rhs, h, l_rhs) = symexec rhs env sdef h in
+      let v =
+        (match (op, lhs, rhs) with
+        | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
+        | (Sub, Num(lhs), Num(rhs)) -> Num(lhs - rhs)
+        | (Mul, Num(lhs), Num(rhs)) -> Num(lhs * rhs)
+        | (Div, Num(lhs), Num(rhs)) -> Num(lhs / rhs)
+        | (Eq, Num(lhs), Num(rhs)) -> Bool(lhs == rhs)
+        | (Ne, Num(lhs), Num(rhs)) -> Bool(lhs != rhs)
+        | (Eq, Bool(lhs), Bool(rhs)) -> Bool(lhs == rhs)
+        | (Ne, Bool(lhs), Bool(rhs)) -> Bool(lhs != rhs)
+        | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs == rhs && String.equal lid rid)
+        | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs != rhs || not (String.equal lid rid))
+        (* should unit get a comparison definition? *)
+        | (Le, Num(lhs), Num(rhs)) -> Bool(lhs <= rhs)
+        | (Lt, Num(lhs), Num(rhs)) -> Bool(lhs < rhs)
+        | (Ge, Num(lhs), Num(rhs)) -> Bool(lhs >= rhs)
+        | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
+        | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
+        | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
+        | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
+        )
+      in
+        (v, h, List.append l_lhs l_rhs)
+| Assert(_i, assertion, command) ->
+    let proof_node = Assert(assertion, command, env, h, sdef) in
+    let (v, h, l) = symexec command env sdef h in
+      (v, h, proof_node :: l)
+| _ -> (Unit, IntMap.empty, [])
+
+
+let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
     let sym = int_symbol i in
     let c = Z3.Arithmetic.Integer.mk_const ctx sym in
@@ -58,72 +137,29 @@ let rec derive (expr: expression) (env: verification_env) (h: verification_heap)
       let c = Z3.Boolean.mk_const ctx sym in
       let eq = Z3.Boolean.mk_eq ctx c v in
         (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
-| Id(i, id) -> let (expr, sym, sort) = env |> StringMap.find id in
-      (match Z3.Sort.get_sort_kind sort with
-      | BOOL_SORT -> (expr, sym, sort)
-      | INT_SORT -> (expr, sym, sort)
-      | _ -> raise (SymbolicExecutionException ("Unsupported sort at " ^ string_of_int i  ^ ": " ^ Z3.Sort.to_string sort))
+| Id(i, id) -> let v = env |> StringMap.find id in
+      (match v with
+      | Num(n) ->
+          let sym = int_symbol i in
+          let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+          let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
+            (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
+      | _ -> raise (SymbolicExecutionException "TODO: Derive Id does not support all types yet")
       )
-| _ -> raise (SymbolicExecutionException "TODO: derive does not support all AST nodes yet!")
+| _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
 
-
-exception Unsatisfiable
-exception Unknown
-
-let solve formula = match Z3.Solver.check solver formula with
-| SATISFIABLE -> ()
-| UNSATISFIABLE -> raise Unsatisfiable
-| UNKNOWN -> raise Unknown (* should unknown raise an exception? *)
-
-let rec verify (expr: expression) (env: verification_env) (h: verification_heap) (constraints: Z3.Expr.expr list) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
-| Assert(_i, assertion, body) ->
-  let (body_formula, result_sym, result_sort) = verify body env h constraints in
-  let env_with_result = env |> StringMap.add "result" (body_formula, result_sym, result_sort) in
-  let (assertion_formula, assertion_sym, assertion_sort) = derive assertion env_with_result h in
-  let c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
-    verify body env h (assertion_formula :: c :: constraints)
-| Let(_i, id, bound, body) ->
-    let bound_variable_names = StringSet.to_list (bound_variables bound) in
-    let (bound, bound_sym, bound_sort) = derive bound env h in
-    let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
-      solve (bound :: (List.append variable_definitions constraints));
-      let env = env |> StringMap.add id (bound, bound_sym, bound_sort) in
-        verify body env h constraints
-| Seq(_i, expr0, expr1) ->
-    let _ = verify expr0 env h constraints in
-      verify expr1 env h constraints
-| Cond(i, cond, then_body, else_body) ->
-    let bound_variable_names_cond = StringSet.to_list (bound_variables cond) in
-    let bound_variable_names_then = StringSet.to_list (bound_variables then_body) in
-    let bound_variable_names_else = StringSet.to_list (bound_variables else_body) in
-    let variable_definitions_cond = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_cond in
-    let variable_definitions_then = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_then in
-    let variable_definitions_else = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names_else in
-    let (cond, cond_sym, _cond_sort) = derive cond env h in
-    let cond_c = Z3.Boolean.mk_const ctx cond_sym in
-      solve (cond :: (List.append variable_definitions_cond constraints));
-      let (then_body, then_sym, then_sort) = verify then_body env h constraints in
-      let (else_body, else_sym, else_sort) = verify else_body env h constraints in
-      let then_c = Z3.Expr.mk_const ctx then_sym then_sort in
-      let else_c = Z3.Expr.mk_const ctx else_sym else_sort in
-      let sym = int_symbol i in
-      let c = Z3.Expr.mk_const ctx sym then_sort in (* then_sort and else_sort should be the same. If not, then the type checker is to blame *)
-      let formula =
-        Z3.Boolean.mk_ite
-        ctx
-        (Z3.Boolean.mk_and ctx (cond :: cond_c :: variable_definitions_cond))
-        (Z3.Boolean.mk_and ctx (then_body :: (Z3.Boolean.mk_eq ctx c then_c) :: variable_definitions_then))
-        (Z3.Boolean.mk_and ctx (else_body :: (Z3.Boolean.mk_eq ctx c else_c) :: variable_definitions_else))
-      in
-        (*print_endline (Z3.Expr.to_string (Z3.Boolean.mk_and ctx (formula :: constraints)));*)
-        solve (formula :: constraints);
-        (formula, sym, then_sort)
-| expr ->
-    let bound_variable_names = StringSet.to_list (bound_variables expr) in
-    let (expr, sym, sort) = derive expr env h in
-    let variable_definitions = List.map (fun x -> let (expr, _, _) = env |> StringMap.find x in expr) bound_variable_names in
-    let formula = Z3.Boolean.mk_and ctx (expr :: variable_definitions) in
-      solve (formula :: constraints);
-      (formula, sym, sort)
-
-(*| _ -> raise (SymbolicExecutionException "TODO: verify does not support all AST nodes yet!")*)
+let verify (expr: expression) =
+  let (_, _, proof_nodes) = symexec expr StringMap.empty StringMap.empty IntMap.empty in
+  let solve_node (n: proof_tree) = (
+    match n with
+    | Assert(assertion, command, env, h, sdef) ->
+      let (result, _, _) = symexec command env sdef h in
+      let (assertion, assertion_sym, assertion_sort) = derive assertion (env |> StringMap.add "result" result) h in
+        let assertion_c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
+        print_endline (Z3.Expr.to_string assertion);
+        solve [assertion; assertion_c]
+    | _ -> raise (SymbolicExecutionException "TODO: Verify does not support this proof_tree node (yet?)")
+  )
+  in
+  let rec process_all_nodes (l: proof_tree list) = (match l with (x::xs) -> solve_node x; process_all_nodes xs | [] -> ()) in
+    process_all_nodes proof_nodes

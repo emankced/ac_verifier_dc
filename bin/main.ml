@@ -25,9 +25,9 @@ let speclist = [
 let usage_msg = "Usage: " ^ Array.get Sys.argv 0 ^ " <file> [--no-type-check] [--no-verify] [--no-interpret] [--print-ast]"
 let () = Arg.parse speclist anon_fun usage_msg
 
-let env: environment = StringMap.empty
-let sdef: struct_definitions = StringMap.empty
-let h: heap = IntMap.empty
+let env = StringMap.empty
+let sdef = StringMap.empty
+let h = IntMap.empty
 
 let () = if String.equal "" !input_file then
     (print_endline usage_msg;
@@ -65,7 +65,7 @@ let () = if String.equal "" !input_file then
           | Unit -> print_endline "Unit"
         ); print_newline ()));
       (if not !no_verify then
-        print_endline (try (let _ = verify prog StringMap.empty IntMap.empty [] in "satisfiable") with
+        print_endline (try (let _ = verify prog in "satisfiable") with
           | Unsatisfiable -> "unsatisfiable"
           | Unknown -> "unknown"
         )
