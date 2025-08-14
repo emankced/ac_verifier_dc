@@ -90,3 +90,8 @@ let%test "Verify conditions 4" =
             else
               @ result >= 7 @
               10")
+
+let%test "Verify conditions 5" =
+  vf "@ result == 10 @
+      let x := 2 in
+        if true then x + 8 else 8 + x"

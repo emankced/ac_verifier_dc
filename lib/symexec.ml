@@ -43,10 +43,8 @@ type struct_definitions = ((string * struct_type) list StringMap.t)
 type heap = ((value list) IntMap.t)
 
 type proof_tree =
-| Rules of proof_tree list
 | Assert of expression * expression * environment * heap * struct_definitions
-| Impl of proof_tree * proof_tree
-| Unprocessed of expression
+| Impl of expression * (proof_tree list) * environment * heap * struct_definitions
 (*| Derived of Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort*)
 
 let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): value * heap * (proof_tree list) = match expr with
@@ -93,6 +91,23 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
     let proof_node = Assert(assertion, command, env, h, sdef) in
     let (v, h, l) = symexec command env sdef h in
       (v, h, proof_node :: l)
+| Cond(_i, cond, then_body, else_body) ->
+    let (then_v, _then_h, then_l) = symexec then_body env sdef h in
+    let (else_v, _else_h, else_l) = symexec else_body env sdef h in
+    let then_node = Impl(cond, then_l, env, h, sdef) in
+    let else_node = Impl((BinOp(-1, Eq, cond, Bool(-2, false))), else_l, env, h, sdef) in
+    let v = (match (then_v, else_v) with
+    | (Num(tn), Num(en)) -> if tn == en then Num(tn) else InvalidatedNum
+    | (InvalidatedNum, _) -> InvalidatedNum
+    | (_, InvalidatedNum) -> InvalidatedNum
+    | (Bool(tn), Bool(en)) -> if tn == en then Bool(tn) else InvalidatedBool
+    | (InvalidatedBool, _) -> InvalidatedBool
+    | (_, InvalidatedBool) -> InvalidatedBool
+    | (Unit, Unit) -> Unit
+    | _ -> raise (SymbolicExecutionException "symexec Cond does not support all value types (yet?)")
+    ) in
+      (* TODO invalidate h entries properly *)
+      (v, h, [then_node; else_node])
 | _ -> (Unit, IntMap.empty, [])
 
 
@@ -158,7 +173,13 @@ let verify (expr: expression) =
         let assertion_c = Z3.Expr.mk_const ctx assertion_sym assertion_sort in
         print_endline (Z3.Expr.to_string assertion);
         solve [assertion; assertion_c]
-    | _ -> raise (SymbolicExecutionException "TODO: Verify does not support this proof_tree node (yet?)")
+    | Impl(_lhs, rhs, _env, _h, _sdef) ->
+      let check_all_rhs rhs = (match rhs with
+      | (_x::_xs) -> raise (SymbolicExecutionException "TODO: Verify does not solve implications (yet?)")
+      | [] -> ()
+      ) in
+        check_all_rhs rhs
+    (*| _ -> raise (SymbolicExecutionException "TODO: Verify does not support this proof_tree node (yet?)")*)
   )
   in
   let rec process_all_nodes (l: proof_tree list) = (match l with (x::xs) -> solve_node x; process_all_nodes xs | [] -> ()) in
