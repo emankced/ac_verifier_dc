@@ -119,32 +119,37 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
         vhl, Rules(ptl)
 
 | Id(_i, id) -> [(env |> StringMap.find id, h)], True
-(*| BinOp(_i, op, lhs, rhs) ->
-    let (lhs, h, l_lhs) = List.hd (symexec lhs env sdef h) in (* TODO handle lists *)
-      let (rhs, h, l_rhs) = List.hd (symexec rhs env sdef h) in
-      let v =
-        (match (op, lhs, rhs) with
-        | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
-        | (Sub, Num(lhs), Num(rhs)) -> Num(lhs - rhs)
-        | (Mul, Num(lhs), Num(rhs)) -> Num(lhs * rhs)
-        | (Div, Num(lhs), Num(rhs)) -> Num(lhs / rhs)
-        | (Eq, Num(lhs), Num(rhs)) -> Bool(lhs == rhs)
-        | (Ne, Num(lhs), Num(rhs)) -> Bool(lhs != rhs)
-        | (Eq, Bool(lhs), Bool(rhs)) -> Bool(lhs == rhs)
-        | (Ne, Bool(lhs), Bool(rhs)) -> Bool(lhs != rhs)
-        | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs == rhs && String.equal lid rid)
-        | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs != rhs || not (String.equal lid rid))
-        (* should unit get a comparison definition? *)
-        | (Le, Num(lhs), Num(rhs)) -> Bool(lhs <= rhs)
-        | (Lt, Num(lhs), Num(rhs)) -> Bool(lhs < rhs)
-        | (Ge, Num(lhs), Num(rhs)) -> Bool(lhs >= rhs)
-        | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
-        | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
-        | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
-        | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
-        )
-      in
-        [(v, h, List.append l_lhs l_rhs)]*)
+| BinOp(_i, op, lhs, rhs) ->
+    let lhs_vhl, lhs_pt = symexec lhs env sdef h in
+    let vhl, ptl = List.fold_right (fun (lhs_v, h) (vhl, ptl) ->
+      let rhs_vhl, rhs_pt = symexec rhs env sdef h in
+        let vhl2 = List.map (fun (rhs_v, h) ->
+            (match (op, lhs_v, rhs_v) with
+            | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
+            | (Sub, Num(lhs), Num(rhs)) -> Num(lhs - rhs)
+            | (Mul, Num(lhs), Num(rhs)) -> Num(lhs * rhs)
+            | (Div, Num(lhs), Num(rhs)) -> Num(lhs / rhs)
+            | (Eq, Num(lhs), Num(rhs)) -> Bool(lhs == rhs)
+            | (Ne, Num(lhs), Num(rhs)) -> Bool(lhs != rhs)
+            | (Eq, Bool(lhs), Bool(rhs)) -> Bool(lhs == rhs)
+            | (Ne, Bool(lhs), Bool(rhs)) -> Bool(lhs != rhs)
+            | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs == rhs && String.equal lid rid)
+            | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs != rhs || not (String.equal lid rid))
+            (* should unit get a comparison definition? *)
+            | (Le, Num(lhs), Num(rhs)) -> Bool(lhs <= rhs)
+            | (Lt, Num(lhs), Num(rhs)) -> Bool(lhs < rhs)
+            | (Ge, Num(lhs), Num(rhs)) -> Bool(lhs >= rhs)
+            | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
+            | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
+            | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
+            | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
+            ), h
+          ) rhs_vhl
+        in
+          List.append vhl vhl2, rhs_pt :: ptl
+      ) lhs_vhl ([], [lhs_pt])
+    in
+      vhl, Rules(ptl)
 | Assert(_i, assertion, command) ->
     let vhl, pt = symexec command env sdef h in
     let formulae = List.fold_right (fun (v, h) formulae ->
