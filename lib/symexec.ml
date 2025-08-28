@@ -162,13 +162,16 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
           formula :: formulae
       ) vhl [] in
       vhl, Rules(pt :: formulae)
-(*| Cond(_i, cond, then_body, else_body) ->
-    let (then_v, then_h, then_l) = List.hd (symexec then_body env sdef h) in (* TODO support lists *)
-    let (else_v, else_h, else_l) = List.hd (symexec else_body env sdef h) in
-    let then_node = Impl(cond, then_l, env, h, sdef) in
-    let else_node = Impl((BinOp(-1, Eq, cond, Bool(-2, false))), else_l, env, h, sdef) in
+| Cond(_i, cond, then_body, else_body) ->
+    let cond, sym, sort = derive cond env h in
+    let c = Z3.Expr.mk_const ctx sym sort in
+    let eq = Z3.Boolean.mk_eq ctx cond c in
+    let not_cond = Formula(Z3.Boolean.mk_and ctx [cond; eq; Z3.Boolean.mk_not ctx c]) in
+    let cond = Formula(Z3.Boolean.mk_and ctx [cond; eq; c]) in
+    let then_vhl, then_pt = symexec then_body env sdef h in
+    let else_vhl, else_pt = symexec else_body env sdef h in
       (* TODO invalidate h entries properly *)
-      [(then_v, then_h, [then_node]); (else_v, else_h, [else_node])]*)
+      List.append then_vhl else_vhl, Rules([Impl(cond, then_pt); Impl(not_cond, else_pt)])
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let rec solve_tree (t: proof_tree) = (
@@ -176,6 +179,11 @@ let rec solve_tree (t: proof_tree) = (
     | True -> ()
     | Formula(formula) -> solve [formula]
     | Rules(l) -> List.fold_right (fun t _ -> solve_tree t) l ()
+    | Impl(lhs, rhs) ->
+        (try (let _ = solve_tree lhs in solve_tree rhs) with
+          | Unsatisfiable -> ()
+          | Unknown -> ()
+        )
     | _ -> raise (SymbolicExecutionException "TODO: solve_tree does not support this proof_tree node (yet?)")
   )
 
