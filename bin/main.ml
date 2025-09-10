@@ -4,6 +4,7 @@ open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
 open Appendix_c_verifier.Symexec
 open Appendix_c_verifier.Common
+open Appendix_c_verifier.Preproc
 
 let () = print_endline "Appendix C Verifier"; print_newline ()
 
@@ -55,6 +56,11 @@ let () = if String.equal "" !input_file then
           print_endline ("Type: " ^ types_to_string tc_res);
           print_newline ()
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
+      (let pprog = preproc prog in
+        print_endline "preproc AST:";
+        print_endline (string_of_expression pprog);
+        print_newline ()
+      );
       (if not !no_interpret then
         (print_endline "Result:";
         (let (res, _) = interp prog env sdef h in
