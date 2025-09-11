@@ -56,7 +56,7 @@ let () = if String.equal "" !input_file then
           print_endline ("Type: " ^ types_to_string tc_res);
           print_newline ()
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
-      let pprog = preproc prog in
+      let pprog = preproc (ssa prog "" "") in
         print_endline "preproc AST:";
         print_endline (string_of_expression pprog);
         print_newline ();

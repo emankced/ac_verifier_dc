@@ -4,6 +4,7 @@ open Appendix_c_verifier.Preproc
 
 let vf (src: string): bool =
   let prog = parse src in
+  let prog = ssa prog "" "" in
   let prog = preproc prog in
     try (let _ = verify prog in true) with
     | _ -> false
