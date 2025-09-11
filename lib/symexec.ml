@@ -97,6 +97,11 @@ let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * 
           let c = Z3.Arithmetic.Integer.mk_const ctx sym in
           let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
             (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
+      | Bool(b) ->
+          let sym = int_symbol i in
+          let c = Z3.Boolean.mk_const ctx sym in
+          let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
+            (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
       | _ -> raise (SymbolicExecutionException "TODO: Derive Id does not support all types yet")
       )
 | _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
@@ -159,6 +164,10 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
     let _else_v, _else_h, else_pt = symexec else_body env sdef h in
       (* TODO invalidate h entries properly *)
       InvalidatedNum, IntMap.empty, Rules([Impl(cond, then_pt); Impl(not_cond, else_pt)])
+| Seq(_i, expr0, expr1) ->
+    let _v, h, expr0_pt = symexec expr0 env sdef h in
+    let v, h, expr1_pt = symexec expr1 env sdef h in
+      v, h, Rules([expr0_pt; expr1_pt])
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let rec solve_tree (t: proof_tree) = (
