@@ -97,3 +97,24 @@ let%test "Verify conditions 5" =
   vf "@ result == 10 @
       let x := 2 in
         if true then x + 8 else 8 + x"
+
+let%test "Verify aliasing 1" =
+  vf "@ result == 10 @
+      let x := 2 in
+        let x := 10 in
+          x"
+
+let%test "Verify aliasing 2" =
+  vf "@ result == 14 @
+      let x := 2 in
+      let y := x + x in
+      let x := 10 in
+      let y := x + y in
+        y"
+
+let%test "Verify aliasing 3" =
+  vf "let x := 2 in
+        @ x == 2 @
+        let x := 10 in
+          @ x == 10 @
+            x"
