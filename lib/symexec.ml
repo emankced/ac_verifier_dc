@@ -101,77 +101,64 @@ let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * 
       )
 | _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
 
-let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): ((value * heap) list) * proof_tree = match expr with
-| Num(_i, n) -> [(Num(n), h)], True
-| Bool(_i, b) -> [(Bool(b), h)], True
-| Null(_i) -> [(Loc(0, ""), h)], True
+let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): value * heap * proof_tree = match expr with
+| Num(_i, n) -> Num(n), h, True
+| Bool(_i, b) -> Bool(b), h, True
+| Null(_i) -> Loc(0, ""), h, True
 | Let(_i, id, bound, body) ->
     (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (SymbolicExecutionException "Let ID already exists as struct name!")
     else
-      let bound_vhl, bound_pt = symexec bound env sdef h in (* vhl = value heap list, pt = proof tree*)
-      let vhl_pt_l = List.map (fun (v, h) ->
-        let env = env |> StringMap.add id v in
-        symexec body env sdef h
-      ) bound_vhl in
-      let vhl, ptl = List.fold_right (fun (vhl, pt) (vhl2, ptl) -> (List.append vhl vhl2, pt::ptl)) vhl_pt_l ([], [bound_pt]) in
-        vhl, Rules(ptl)
-
-| Id(_i, id) -> [(env |> StringMap.find id, h)], True
+      let v, h, bound_pt = symexec bound env sdef h in (* vhl = value heap list, pt = proof tree*)
+      let env = env |> StringMap.add id v in
+      let v, h, body_pt = symexec body env sdef h in
+        v, h, Rules([bound_pt; body_pt])
+| Id(_i, id) -> env |> StringMap.find id, h, True
 | BinOp(_i, op, lhs, rhs) ->
-    let lhs_vhl, lhs_pt = symexec lhs env sdef h in
-    let vhl, ptl = List.fold_right (fun (lhs_v, h) (vhl, ptl) ->
-      let rhs_vhl, rhs_pt = symexec rhs env sdef h in
-        let vhl2 = List.map (fun (rhs_v, h) ->
-            (match (op, lhs_v, rhs_v) with
-            | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
-            | (Sub, Num(lhs), Num(rhs)) -> Num(lhs - rhs)
-            | (Mul, Num(lhs), Num(rhs)) -> Num(lhs * rhs)
-            | (Div, Num(lhs), Num(rhs)) -> Num(lhs / rhs)
-            | (Eq, Num(lhs), Num(rhs)) -> Bool(lhs == rhs)
-            | (Ne, Num(lhs), Num(rhs)) -> Bool(lhs != rhs)
-            | (Eq, Bool(lhs), Bool(rhs)) -> Bool(lhs == rhs)
-            | (Ne, Bool(lhs), Bool(rhs)) -> Bool(lhs != rhs)
-            | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs == rhs && String.equal lid rid)
-            | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs != rhs || not (String.equal lid rid))
-            (* should unit get a comparison definition? *)
-            | (Le, Num(lhs), Num(rhs)) -> Bool(lhs <= rhs)
-            | (Lt, Num(lhs), Num(rhs)) -> Bool(lhs < rhs)
-            | (Ge, Num(lhs), Num(rhs)) -> Bool(lhs >= rhs)
-            | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
-            | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
-            | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
-            | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
-            ), h
-          ) rhs_vhl
-        in
-          List.append vhl vhl2, rhs_pt :: ptl
-      ) lhs_vhl ([], [lhs_pt])
+    let lhs_v, h, lhs_pt = symexec lhs env sdef h in
+    let rhs_v, h, rhs_pt = symexec rhs env sdef h in
+    let v = (match (op, lhs_v, rhs_v) with
+      | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
+      | (Sub, Num(lhs), Num(rhs)) -> Num(lhs - rhs)
+      | (Mul, Num(lhs), Num(rhs)) -> Num(lhs * rhs)
+      | (Div, Num(lhs), Num(rhs)) -> Num(lhs / rhs)
+      | (Eq, Num(lhs), Num(rhs)) -> Bool(lhs == rhs)
+      | (Ne, Num(lhs), Num(rhs)) -> Bool(lhs != rhs)
+      | (Eq, Bool(lhs), Bool(rhs)) -> Bool(lhs == rhs)
+      | (Ne, Bool(lhs), Bool(rhs)) -> Bool(lhs != rhs)
+      | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs == rhs && String.equal lid rid)
+      | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs != rhs || not (String.equal lid rid))
+      (* should unit get a comparison definition? *)
+      | (Le, Num(lhs), Num(rhs)) -> Bool(lhs <= rhs)
+      | (Lt, Num(lhs), Num(rhs)) -> Bool(lhs < rhs)
+      | (Ge, Num(lhs), Num(rhs)) -> Bool(lhs >= rhs)
+      | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
+      | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
+      | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
+      | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
+      )
     in
-      vhl, Rules(ptl)
+      v, h, Rules([lhs_pt; rhs_pt])
 | Assert(_i, assertion, command) ->
-    let vhl, pt = symexec command env sdef h in
-    let formulae = List.fold_right (fun (v, h) formulae ->
-        let env = env |> StringMap.add "result" v in
-        let (assertion, sym, sort) = derive assertion env h in
-        let c = Z3.Expr.mk_const ctx sym sort in
-        let eq = Z3.Boolean.mk_eq ctx assertion c in
-        let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
-        let formula = Formula(formula) in
-          formula :: formulae
-      ) vhl [] in
-      vhl, Rules(pt :: formulae)
+    let v, h, pt = symexec command env sdef h in
+    let env = env |> StringMap.add "result" v in
+    let (assertion, sym, sort) = derive assertion env h in
+    let c = Z3.Expr.mk_const ctx sym sort in
+    let eq = Z3.Boolean.mk_eq ctx assertion c in
+    let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
+    let formula = Formula(formula) in
+      v, h, Rules([pt; formula])
 | Cond(_i, cond, then_body, else_body) ->
     let cond, sym, sort = derive cond env h in
     let c = Z3.Expr.mk_const ctx sym sort in
     let eq = Z3.Boolean.mk_eq ctx cond c in
     let not_cond = Formula(Z3.Boolean.mk_and ctx [cond; eq; Z3.Boolean.mk_not ctx c]) in
     let cond = Formula(Z3.Boolean.mk_and ctx [cond; eq; c]) in
-    let then_vhl, then_pt = symexec then_body env sdef h in
-    let else_vhl, else_pt = symexec else_body env sdef h in
+    let _then_v, _then_h, then_pt = symexec then_body env sdef h in
+    let _else_v, _else_h, else_pt = symexec else_body env sdef h in
       (* TODO invalidate h entries properly *)
-      List.append then_vhl else_vhl, Rules([Impl(cond, then_pt); Impl(not_cond, else_pt)])
+      InvalidatedNum, IntMap.empty, Rules([Impl(cond, then_pt); Impl(not_cond, else_pt)])
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let rec solve_tree (t: proof_tree) = (
@@ -180,13 +167,14 @@ let rec solve_tree (t: proof_tree) = (
     | Formula(formula) -> solve [formula]
     | Rules(l) -> List.fold_right (fun t _ -> solve_tree t) l ()
     | Impl(lhs, rhs) ->
-        (try (let _ = solve_tree lhs in solve_tree rhs) with
-          | Unsatisfiable -> ()
-          | Unknown -> ()
-        )
+        if (try (let _ = solve_tree lhs in true) with
+          | Unsatisfiable -> false
+          | Unknown -> false
+        ) then
+          (solve_tree rhs)
     | _ -> raise (SymbolicExecutionException "TODO: solve_tree does not support this proof_tree node (yet?)")
   )
 
 let verify (expr: expression) =
-  let _, pt = symexec expr StringMap.empty StringMap.empty IntMap.empty in
+  let _, _, pt = symexec expr StringMap.empty StringMap.empty IntMap.empty in
     solve_tree pt
