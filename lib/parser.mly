@@ -100,7 +100,7 @@ type_:
 ;
 
 command:
-| a = assertion; c = command { Assert(get i, a, c) }
+| a = assertion { Assert(get i, a) }
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(get i, id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(get i, cond, then_body, else_body) }
 | IF; cond = expr; THEN; then_body = command { Cond(get i, cond, then_body, Unit(get i)) }

@@ -29,14 +29,14 @@ let types_to_string (t: types) : string = match t with
 | Unit -> "Unit"
 | Unknown -> "Unknown"
 
-let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_type_definitions) (tm: ast_types) : types * ast_types = match expr with
+let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_type_definitions) (tm: ast_types) (res: types) : types * ast_types = match expr with
 | Null(i) -> (Null, tm |> IntMap.add i Null)
 | Num(i, _) -> (Num, tm |> IntMap.add i Num)
 | Bool(i, _) -> (Bool, tm |> IntMap.add i Bool)
 | Unit(i) -> (Unit, tm |> IntMap.add i Unit)
 | BinOp(i, op, lhs, rhs) ->
-    let (lhs, tm) = type_check lhs env sdef tm in
-      let (rhs, tm) = type_check rhs env sdef tm in
+    let (lhs, tm) = type_check lhs env sdef tm Unit in
+      let (rhs, tm) = type_check rhs env sdef tm Unit in
         let t = (match (op, lhs, rhs) with
         | (Add, Num, Num) -> Num
         | (Sub, Num, Num) -> Num
@@ -65,15 +65,15 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         ) in (t, tm |> IntMap.add i t)
 | Id(i, id) -> let t = env |> StringMap.find id in (t, tm |> IntMap.add i t)
 | Let(i, id, bound, body) ->
-    let (bound, tm) = type_check bound env sdef tm in
+    let (bound, tm) = type_check bound env sdef tm Unit in
       let env = env |> StringMap.add id bound in
-        let (body, tm) = type_check body env sdef tm in
+        let (body, tm) = type_check body env sdef tm Unit in
           (body, tm |> IntMap.add i body)
 | Cond(i, cond, then_body, else_body) ->
-  (match (type_check cond env sdef tm) with
+  (match (type_check cond env sdef tm Unit) with
   | (Bool, tm) ->
-      let (lhs, tm) = type_check then_body env sdef tm in
-      let (rhs, tm) = type_check else_body env sdef tm in
+      let (lhs, tm) = type_check then_body env sdef tm Unit in
+      let (rhs, tm) = type_check else_body env sdef tm Unit in
       let (t, correct) =
         (match (lhs, rhs) with
         | (Loc(_), Null) -> (lhs, true)
@@ -86,8 +86,8 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
   | _ -> raise (TypeCheckError ("Cond:" ^ string_of_int i ^ " requires a bool as condition!"))
   )
 | Seq(i, expr0, expr1) ->
-    let (_, tm) = type_check expr0 env sdef tm in
-      let (t, tm) = type_check expr1 env sdef tm in
+    let (res, tm) = type_check expr0 env sdef tm res in
+      let (t, tm) = type_check expr1 env sdef tm res in
         (t, tm |> IntMap.add i t)
 | Struct(i, id, types, body) ->
     if StringMap.exists (fun k _ -> String.equal id k) sdef || StringMap.exists (fun k _ -> String.equal id k) env then
@@ -98,13 +98,13 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         | Bool -> Bool
         | LocStruct(name) -> if String.equal id name || StringMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")
         )) types) in
-      let (t, tm) = type_check body env sdef tm in
+      let (t, tm) = type_check body env sdef tm res in
         (t, tm |> IntMap.add i t)
 | Malloc(i, id, exprs) ->
     let expected_types = StringMap.find id sdef in
     let expected_types = List.map (fun (_f, t) -> t) expected_types in
       let (actual_types, tm) = List.fold_right (
-        fun e (actual_types, tm) -> let (t, tm) = type_check e env sdef tm in
+        fun e (actual_types, tm) -> let (t, tm) = type_check e env sdef tm Unit in
           (t :: actual_types, tm |> IntMap.add (get_ast_id e) t)
       ) exprs ([], tm) in
       let t = Loc(id) in
@@ -128,7 +128,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
           else
             raise (TypeCheckError ("Malloc:" ^ string_of_int i ^ " the initialising expressions do not fit to the data structure. Expected: {" ^ (List.fold_left (fun s e -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) "" expected_types) ^ "}, but got: {" ^ (List.fold_left (fun s e -> (if String.equal "" s then s else s ^ ", ") ^ types_to_string e) "" actual_types) ^ "}"))
 | Mfree(i, loc) ->
-    let (t, tm) = type_check loc env sdef tm in (match t with
+    let (t, tm) = type_check loc env sdef tm Unit in (match t with
       | Loc(id) -> if StringMap.exists (fun k _ -> String.equal id k) sdef then
             (Unit, tm |> IntMap.add i Unit)
           else
@@ -136,11 +136,11 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       | _ -> raise (TypeCheckError ("Mfree:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
       )
 | Mset(i, loc, field, expr) ->
-    let (t, tm) = type_check loc env sdef tm in (match t with
+    let (t, tm) = type_check loc env sdef tm Unit in (match t with
       | Loc(id) ->
           let expected_types = StringMap.find id sdef in
           let (_f, expected_type) = List.find (fun (f, _) -> String.equal f field) expected_types in
-          let (actual_type, tm) = type_check expr env sdef tm in
+          let (actual_type, tm) = type_check expr env sdef tm Unit in
             if (match (expected_type, actual_type) with
             | (Loc(idl), Loc(idr)) -> String.equal idl idr
             | (Loc(_), Null) -> true (* allow assigning null *)
@@ -152,7 +152,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       | _ -> raise (TypeCheckError ("Mset:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
       )
 | Mget(i, loc, field) ->
-    let (t, tm) = type_check loc env sdef tm in (match t with
+    let (t, tm) = type_check loc env sdef tm Unit in (match t with
       | Loc(id) ->
           let expected_types = StringMap.find id sdef in
           let (_f, t) = List.find (fun (f, _) -> String.equal f field) expected_types in
@@ -160,33 +160,32 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       | _ -> raise (TypeCheckError ("Mget:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
       )
 | While(i, cond, body) ->
-    let (t, tm) = type_check cond env sdef tm in
+    let (t, tm) = type_check cond env sdef tm Unit in
       if t == Bool then
-        let (_, tm) = type_check body env sdef tm in
+        let (_, tm) = type_check body env sdef tm Unit in
           (Unit, tm |> IntMap.add i Unit)
       else
         raise (TypeCheckError ("While:" ^ string_of_int i ^ " requires a bool as condition!"))
 | For(i, id, start, end_, body) ->
-    let (t, tm) = type_check start env sdef tm in
+    let (t, tm) = type_check start env sdef tm Unit in
       if t == Num then
-        let (t, tm) = type_check end_ env sdef tm in
+        let (t, tm) = type_check end_ env sdef tm Unit in
           if t == Num then
             let env = env |> StringMap.add id Num in
-            let (_, tm) = type_check body env sdef tm in
+            let (_, tm) = type_check body env sdef tm Unit in
               (Unit, tm |> IntMap.add i Unit)
           else
             raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as end parameter!"))
       else
         raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as start parameter!"))
-| Assert(i, assertion, body) ->
-    let (t_body, tm2) = type_check body env sdef tm in
-    let env = env |> StringMap.add "result" t_body in
-    let (t_assertion, _) = type_check assertion env sdef tm in
+| Assert(i, assertion) ->
+    let env = env |> StringMap.add "result" res in
+    let (t_assertion, _) = type_check assertion env sdef tm Unit in
       (match t_assertion with
       | Bool -> ()
       | _ -> raise (TypeCheckError ("Assert:" ^ string_of_int i ^ " requires a bool expression as assertion!"))
       );
-      (t_body, tm2)
+      (res, tm)
 (*| _ -> raise (TypeCheckError "TODO: implement all cases")*)
 
 (** Collects all used bound variable names of an expression *)
@@ -200,7 +199,7 @@ let rec bound_variables (expr: expression): StringSet.t = match expr with
 | BinOp(_, _, lhs, rhs) -> StringSet.union (bound_variables lhs) (bound_variables rhs)
 | Seq(_, expr0, expr1) -> StringSet.union (bound_variables expr0) (bound_variables expr1)
 | Cond(_, cond, then_body, else_body) -> StringSet.union (bound_variables cond) (StringSet.union (bound_variables then_body) (bound_variables else_body))
-| Assert(_, assertion, body) -> StringSet.union (StringSet.filter (fun s -> not (String.equal s "result")) (bound_variables assertion)) (bound_variables body)
+| Assert(_, assertion) -> StringSet.filter (fun s -> not (String.equal s "result")) (bound_variables assertion)
 | Struct(_, _, _, body) -> bound_variables body
 | Malloc(_, _, exprs) -> List.fold_right (fun e set -> StringSet.union set (bound_variables e)) exprs StringSet.empty
 | Mfree(_, loc) -> bound_variables loc

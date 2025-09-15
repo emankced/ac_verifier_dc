@@ -43,7 +43,7 @@ type expression =
 | Mfree of ast_id * expression
 | While of ast_id * expression * expression
 | For of ast_id * string * expression * expression * expression
-| Assert of ast_id * expression * expression
+| Assert of ast_id * expression
 (* functions *)
 (* recursive let *)
 
@@ -90,7 +90,7 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Mget(i, loc, field) -> "Mget:" ^ string_of_int i ^ "(" ^ string_of_expression loc ^ ", " ^ field ^ ")"
 | For(i, id, start, end_, body) -> "For:" ^ string_of_int i ^ "(\"" ^ id ^ "\", " ^ string_of_expression start ^ ", " ^ string_of_expression end_ ^ ", " ^ string_of_expression body ^ ")"
 | While(i, cond, body) -> "While:" ^ string_of_int i ^ "(" ^ string_of_expression cond ^ ", " ^ string_of_expression body ^ ")"
-| Assert(i, assertion, command) -> "Assert:" ^ string_of_int i ^ "(" ^ string_of_expression assertion ^ ", " ^ string_of_expression command ^ ")"
+| Assert(i, assertion) -> "Assert:" ^ string_of_int i ^ "(" ^ string_of_expression assertion ^ ")"
 
 (** returns the ast_id of an ast expression *)
 let get_ast_id (expr: expression) : ast_id = match expr with
@@ -110,4 +110,4 @@ let get_ast_id (expr: expression) : ast_id = match expr with
 | Mfree(i, _) -> i
 | While(i, _, _) -> i
 | For(i, _, _, _, _) -> i
-| Assert(i, _, _) -> i
+| Assert(i, _) -> i

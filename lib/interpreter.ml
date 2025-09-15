@@ -90,7 +90,7 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     )
 
 (** Evaluates expressions based on an environment and heap *)
-let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (h: heap) : value * heap = match expr with
+let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) : value * heap = match expr with
 | Null(_i) -> (Loc(0, ""), h)
 | Num(_i, n) -> (Num(n), h)
 | Bool(_i, b) -> (Bool(b), h)
@@ -102,24 +102,24 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
       raise (InterpreterException "Struct name is already used!")
     else
       let sdef = sdef |> StringMap.add id types in
-        interp body env sdef h
+        interp body env sdef res h
 | Let(_i, id, bound, body) ->
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (InterpreterException "Let ID already exists as struct name!")
     else
-      let (bound, h) = interp bound env sdef h in
+      let (bound, h) = interp bound env sdef Unit h in
         let env = env |> StringMap.add id bound in
-          interp body env sdef h
+          interp body env sdef Unit h
 | Id(_i, id) -> (env |> StringMap.find id, h)
 | Cond(_i, cond, then_body, else_body) ->
-    let (cond, h) = interp cond env sdef h in
+    let (cond, h) = interp cond env sdef Unit h in
       (match cond with
-      | Bool(b) -> if b then interp then_body env sdef h else interp else_body env sdef h
+      | Bool(b) -> if b then interp then_body env sdef Unit h else interp else_body env sdef Unit h
       | _ -> raise (InterpreterException "Cond requires a bool!")
       )
 | BinOp(_i, op, lhs, rhs) ->
-    let (lhs, h) = interp lhs env sdef h in
-      let (rhs, h) = interp rhs env sdef h in
+    let (lhs, h) = interp lhs env sdef res h in
+      let (rhs, h) = interp rhs env sdef res h in
         (match (op, lhs, rhs) with
         | (Add, Num(lhs), Num(rhs)) -> (Num(lhs + rhs), h)
         | (Sub, Num(lhs), Num(rhs)) -> (Num(lhs - rhs), h)
@@ -140,14 +140,14 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         | (Or, Bool(lhs), Bool(rhs)) -> (Bool(lhs || rhs), h)
         | _ -> raise (InterpreterException "Unsupported binary operation!")
         )
-| Seq(_i, expr0, expr1) -> let (_, h) = interp expr0 env sdef h in interp expr1 env sdef h
+| Seq(_i, expr0, expr1) -> let (res, h) = interp expr0 env sdef res h in interp expr1 env sdef res h
 | Malloc(_i, id, exprs) ->
     (*TODO check that the expression list matches the expected types *)
     let _expected_types = sdef |> StringMap.find id in
     let (values_list, h) =
       List.fold_right
         (fun expr (values_list, h) ->
-          let (v, h) = interp expr env sdef h in
+          let (v, h) = interp expr env sdef Unit h in
             (v :: values_list, h))
         exprs
         ([], h)
@@ -155,52 +155,52 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         let (loc, h) = malloc values_list h in
           (Loc(loc, id), h)
 | Mfree(_i, loc) ->
-    let (loc, h) = interp loc env sdef h in
+    let (loc, h) = interp loc env sdef Unit h in
       (match loc with
       | Loc(l, _id) -> (Unit, mfree l h)
       | _ -> raise (InterpreterException "Mfree requires a base location!")
       )
 | Mget(_i, loc, field) ->
-    let (loc, h) = interp loc env sdef h in
+    let (loc, h) = interp loc env sdef Unit h in
       (match loc with
       | Loc(l, id) ->
             (mget l field id h sdef, h)
       | _ -> raise (InterpreterException "Mget requires a location!")
       )
 | Mset(_i, loc, field, expr) ->
-    let (loc, h) = interp loc env sdef h in
+    let (loc, h) = interp loc env sdef Unit h in
       (match loc with
       | Loc(l, id) ->
-        let (expr, h) = interp expr env sdef h in
+        let (expr, h) = interp expr env sdef Unit h in
           (Unit, mset l field id expr h sdef)
       | _ -> raise (InterpreterException "Mset requires a location!")
       )
 | While(_i, condition, body) ->
-  let (condition, h) = interp condition env sdef h in
+  let (condition, h) = interp condition env sdef Unit h in
     (match condition with
     | Bool(condition) ->
       if condition
-        then let (_, h) = interp body env sdef h in
-          interp expr env sdef h
+        then let (_, h) = interp body env sdef Unit h in
+          interp expr env sdef Unit h
         else (Unit, h)
     | _ -> raise (InterpreterException "While requires a bool!")
     )
 | For(i, id, start, end_, body) ->
-  let (start, h) = interp start env sdef h in
-    let (end_, h) = interp end_ env sdef h in
+  let (start, h) = interp start env sdef Unit h in
+    let (end_, h) = interp end_ env sdef Unit h in
       let env = env |> StringMap.add id start in
         (match (start, end_) with
         | (Num(start), Num(end_)) ->
-          let (_, h) = interp body env sdef h in
+          let (_, h) = interp body env sdef Unit h in
             if start == end_ then
               (Unit, h)
             else if start < end_ then
-              interp (For(i, id, Num(-1, start+1), Num(-1, end_), body)) env sdef h
+              interp (For(i, id, Num(-1, start+1), Num(-1, end_), body)) env sdef Unit h
             else
-              interp (For(i, id, Num(-1, start-1), Num(-1, end_), body)) env sdef h
+              interp (For(i, id, Num(-1, start-1), Num(-1, end_), body)) env sdef Unit h
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
-| Assert(_i, _assertion, command) -> interp command env sdef h
+| Assert(_i, _assertion) -> res, h
 
 let (===) (lhs: value) (rhs: value) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs

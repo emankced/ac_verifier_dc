@@ -103,6 +103,7 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
 | Num(_i, n) -> k (Num(n)) h
 | Bool(_i, b) -> k (Bool(b)) h
 | Null(_i) -> k (Loc(0, "")) h
+| Unit(_i) -> k Unit h
 | Let(_i, id, bound, body) ->
     (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
@@ -145,14 +146,14 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
       )
     in
       symexec lhs env sdef res h k
-| Assert(_i, assertion, command) ->
+| Assert(_i, assertion) ->
     let assert_env = env |> StringMap.add "result" res in
     let (assertion, sym, sort) = derive assertion assert_env h in
     let c = Z3.Expr.mk_const ctx sym sort in
     let eq = Z3.Boolean.mk_eq ctx assertion c in
     let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
       solve [formula];
-      symexec command env sdef res h k
+      k res h
 | Seq(_i, expr0, expr1) ->
     let k = (fun (res: value) (h: heap) ->
         symexec expr1 env sdef res h k

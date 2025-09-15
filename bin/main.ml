@@ -52,13 +52,13 @@ let () = if String.equal "" !input_file then
         print_newline ()));
       (if not !no_type_check then
       (*try*)
-        let (tc_res, _tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty in
+        let (tc_res, _tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty Unit in
           print_endline ("Type: " ^ types_to_string tc_res);
           print_newline ()
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
       (if not !no_interpret then
         (print_endline "Result:";
-        (let (res, _) = interp prog env sdef h in
+        (let (res, _) = interp prog env sdef Unit h in
           match res with
           | Loc(l, t) -> print_string "Loc("; print_int l; print_string ", "; print_string t; print_endline ")"
           | Num(n) -> print_string "Num("; print_int n; print_endline ")"
