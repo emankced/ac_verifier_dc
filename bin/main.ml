@@ -4,7 +4,7 @@ open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
 open Appendix_c_verifier.Symexec
 open Appendix_c_verifier.Common
-open Appendix_c_verifier.Preproc
+(*open Appendix_c_verifier.Preproc*)
 
 let () = print_endline "Appendix C Verifier"; print_newline ()
 
@@ -56,22 +56,18 @@ let () = if String.equal "" !input_file then
           print_endline ("Type: " ^ types_to_string tc_res);
           print_newline ()
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
-      let pprog = preproc (ssa prog "" "") in
-        print_endline "preproc AST:";
-        print_endline (string_of_expression pprog);
-        print_newline ();
-        (if not !no_interpret then
-          (print_endline "Result:";
-          (let (res, _) = interp prog env sdef h in
-            match res with
-            | Loc(l, t) -> print_string "Loc("; print_int l; print_string ", "; print_string t; print_endline ")"
-            | Num(n) -> print_string "Num("; print_int n; print_endline ")"
-            | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
-            | Unit -> print_endline "Unit"
-          ); print_newline ()));
-        (if not !no_verify then
-          print_endline (try (let _ = verify pprog in "satisfiable") with
-            | Unsatisfiable -> "unsatisfiable"
-            | Unknown -> "unknown"
-          )
+      (if not !no_interpret then
+        (print_endline "Result:";
+        (let (res, _) = interp prog env sdef h in
+          match res with
+          | Loc(l, t) -> print_string "Loc("; print_int l; print_string ", "; print_string t; print_endline ")"
+          | Num(n) -> print_string "Num("; print_int n; print_endline ")"
+          | Bool(b) -> print_endline ("Bool(" ^ (if b then "true" else "false") ^ ")")
+          | Unit -> print_endline "Unit"
+        ); print_newline ()));
+      (if not !no_verify then
+        print_endline (try (let _ = verify prog in "satisfiable") with
+          | Unsatisfiable -> "unsatisfiable"
+          | Unknown -> "unknown"
         )
+      )

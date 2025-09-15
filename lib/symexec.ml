@@ -42,13 +42,6 @@ type struct_definitions = ((string * struct_type) list StringMap.t)
 (** Map that holds the heap store *)
 type heap = ((value list) IntMap.t)
 
-type proof_tree =
-| True
-| False
-| Formula of Z3.Expr.expr
-| Rules of proof_tree list
-| Impl of proof_tree * proof_tree
-
 let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
     let sym = int_symbol i in
@@ -106,8 +99,67 @@ let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * 
       )
 | _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
 
-let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap): value * heap * proof_tree = match expr with
-| Num(_i, n) -> Num(n), h, True
+let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit): unit = match expr with
+| Num(_i, n) -> k (Num(n)) h
+| Bool(_i, b) -> k (Bool(b)) h
+| Null(_i) -> k (Loc(0, "")) h
+| Let(_i, id, bound, body) ->
+    (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
+    if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
+      raise (SymbolicExecutionException "Let ID already exists as struct name!")
+    else
+      let k = (fun (res: value) (h: heap) ->
+        let env = env |> StringMap.add id res in
+        symexec body env sdef res h k)
+      in
+        symexec bound env sdef res h k
+| Id(_i, id) -> k (env |> StringMap.find id) h
+| BinOp(_i, op, lhs, rhs) ->
+    let k = (fun (res_lhs: value) (h: heap) ->
+        let k = (fun (res_rhs: value) (h: heap) ->
+          let res_binop = (match (op, res_lhs, res_rhs) with
+            | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
+            | (Sub, Num(lhs), Num(rhs)) -> Num(lhs - rhs)
+            | (Mul, Num(lhs), Num(rhs)) -> Num(lhs * rhs)
+            | (Div, Num(lhs), Num(rhs)) -> Num(lhs / rhs)
+            | (Eq, Num(lhs), Num(rhs)) -> Bool(lhs == rhs)
+            | (Ne, Num(lhs), Num(rhs)) -> Bool(lhs != rhs)
+            | (Eq, Bool(lhs), Bool(rhs)) -> Bool(lhs == rhs)
+            | (Ne, Bool(lhs), Bool(rhs)) -> Bool(lhs != rhs)
+            | (Eq, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs == rhs && String.equal lid rid)
+            | (Ne, Loc(lhs, lid), Loc(rhs, rid)) -> Bool(lhs != rhs || not (String.equal lid rid))
+            (* should unit get a comparison definition? *)
+            | (Le, Num(lhs), Num(rhs)) -> Bool(lhs <= rhs)
+            | (Lt, Num(lhs), Num(rhs)) -> Bool(lhs < rhs)
+            | (Ge, Num(lhs), Num(rhs)) -> Bool(lhs >= rhs)
+            | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
+            | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
+            | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
+            | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
+            )
+          in
+            k res_binop h
+          )
+        in
+          symexec rhs env sdef res h k
+      )
+    in
+      symexec lhs env sdef res h k
+| Assert(_i, assertion, command) ->
+    let assert_env = env |> StringMap.add "result" res in
+    let (assertion, sym, sort) = derive assertion assert_env h in
+    let c = Z3.Expr.mk_const ctx sym sort in
+    let eq = Z3.Boolean.mk_eq ctx assertion c in
+    let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
+      solve [formula];
+      symexec command env sdef res h k
+| Seq(_i, expr0, expr1) ->
+    let k = (fun (res: value) (h: heap) ->
+        symexec expr1 env sdef res h k
+      )
+    in
+      symexec expr0 env sdef res h k
+(*| Num(_i, n) -> Num(n), h, True
 | Bool(_i, b) -> Bool(b), h, True
 | Null(_i) -> Loc(0, ""), h, True
 | Let(_i, id, bound, body) ->
@@ -168,22 +220,13 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
     let _v, h, expr0_pt = symexec expr0 env sdef h in
     let v, h, expr1_pt = symexec expr1 env sdef h in
       v, h, Rules([expr0_pt; expr1_pt])
+*)
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
-let rec solve_tree (t: proof_tree) = (
-    match t with
-    | True -> ()
-    | Formula(formula) -> solve [formula]
-    | Rules(l) -> List.fold_right (fun t _ -> solve_tree t) l ()
-    | Impl(lhs, rhs) ->
-        if (try (let _ = solve_tree lhs in true) with
-          | Unsatisfiable -> false
-          | Unknown -> false
-        ) then
-          (solve_tree rhs)
-    | _ -> raise (SymbolicExecutionException "TODO: solve_tree does not support this proof_tree node (yet?)")
-  )
-
 let verify (expr: expression) =
-  let _, _, pt = symexec expr StringMap.empty StringMap.empty IntMap.empty in
-    solve_tree pt
+  let env = StringMap.empty in
+  let sdef = StringMap.empty in
+  let res = Unit in
+  let h = IntMap.empty in
+  let k = (fun (_res: value) (_h: heap) -> ()) in
+    symexec expr env sdef res h k
