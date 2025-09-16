@@ -99,6 +99,38 @@ let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * 
       )
 | _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
 
+(** Memory allocation on the heap *)
+let malloc (init_values: value list) (h: heap) : int * heap =
+  if List.length init_values == 0 then
+    raise (SymbolicExecutionException "malloc cannot allocate nothing")
+  else
+    let max_available_loc =
+      IntMap.fold
+        (fun loc values_list previous_max ->
+          let size = List.length values_list in
+            let loc = loc + size in
+              if loc > previous_max then loc else previous_max)
+        h
+        0x400000
+    in
+      (max_available_loc, h |> IntMap.add max_available_loc init_values)
+
+(** Memory featching from the heap *)
+let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : value =
+  if IntMap.is_empty h then
+    raise (SymbolicExecutionException "mget cannot get anything from an empty heap!")
+  else
+    let td = sdef |> StringMap.find type_id in
+    (match List.find_index (fun (tid, _) -> String.equal tid field) td with
+    | Some off ->
+    let values_list = IntMap.find loc h in
+      if off < 0 || off >= List.length values_list then
+        raise (SymbolicExecutionException ("mget got location out of range: " ^ string_of_int loc))
+      else
+        List.nth values_list off
+    | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
+    )
+
 let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
 | Bool(_i, b) -> k (Bool(b)) h
@@ -182,6 +214,45 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
       )
     in
       symexec cond env sdef res h k assumption
+| Struct(_i, id, fields, body) ->
+    if List.length fields == 0 then
+      raise (SymbolicExecutionException "Field list cannot be empty for struct construction!")
+    else if (StringMap.exists (fun k _ -> String.equal k id) env) || (StringMap.exists (fun k _ -> String.equal k id) sdef) then
+      raise (SymbolicExecutionException "Struct name is already used!")
+    else
+      let sdef = sdef |> StringMap.add id fields in
+        symexec body env sdef Unit h k assumption
+| Malloc(_i, id, exprs) ->
+    (*TODO check that the expression list matches the expected types *)
+    let _expected_types = sdef |> StringMap.find id in
+    let (values_list, h) =
+      List.fold_right
+        (fun expr (values_list, h) ->
+          let value = ref Unit in
+          let value_h = ref h in
+          let concat = (fun (res: value) (h: heap): unit ->
+            value := res;
+            value_h := h
+          )
+          in
+            symexec expr env sdef Unit h concat assumption;
+            (!value :: values_list, !value_h)
+        )
+        exprs
+        ([], h)
+      in
+        let (loc, h) = malloc values_list h in
+          k (Loc(loc, id)) h
+| Mget(_i, loc, field) ->
+    let k = (fun (res: value) (h: heap) ->
+      (match res with
+      | Loc(l, id) ->
+          k (mget l field id h sdef) h
+      | _ -> raise (SymbolicExecutionException "Mget requires a location!")
+      )
+    )
+    in
+      symexec loc env sdef Unit h k assumption
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let verify (expr: expression) =
