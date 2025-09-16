@@ -95,13 +95,13 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
 | Num(_i, n) -> (Num(n), h)
 | Bool(_i, b) -> (Bool(b), h)
 | Unit(_i) -> (Unit, h)
-| Struct(_i, id, types, body) ->
-    if List.length types == 0 then
-      raise (InterpreterException "Type list cannot be empty for struct construction!")
+| Struct(_i, id, fields, body) ->
+    if List.length fields == 0 then
+      raise (InterpreterException "Field list cannot be empty for struct construction!")
     else if (StringMap.exists (fun k _ -> String.equal k id) env) || (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (InterpreterException "Struct name is already used!")
     else
-      let sdef = sdef |> StringMap.add id types in
+      let sdef = sdef |> StringMap.add id fields in
         interp body env sdef res h
 | Let(_i, id, bound, body) ->
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then

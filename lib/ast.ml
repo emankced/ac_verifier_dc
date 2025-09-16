@@ -57,9 +57,9 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Bool(i, b) -> "Bool:" ^ string_of_int i ^ "(" ^ (if b then "true" else "false") ^ ")"
 | Null(i) -> "Null:" ^ string_of_int i
 | Unit(i) -> "Unit:" ^ string_of_int i
-| Struct(i, name, types, body) -> "Struct:" ^ string_of_int i ^ "(" ^ name ^ ", [" ^
+| Struct(i, name, fields, body) -> "Struct:" ^ string_of_int i ^ "(" ^ name ^ ", [" ^
     List.fold_right (fun (f, t) s -> if String.equal s "" then f ^ ": " ^ string_of_struct_type t else f ^ ": " ^ string_of_struct_type t ^
-    "; " ^ s) types "" ^ "], " ^ string_of_expression body ^ ")"
+    "; " ^ s) fields "" ^ "], " ^ string_of_expression body ^ ")"
 | BinOp(i, op, lhs, rhs) ->
   let op = (match op with
     | Add -> "Add"
