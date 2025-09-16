@@ -99,7 +99,7 @@ let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * 
       )
 | _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
 
-let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit): unit = match expr with
+let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
 | Bool(_i, b) -> k (Bool(b)) h
 | Null(_i) -> k (Loc(0, "")) h
@@ -111,9 +111,9 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
     else
       let k = (fun (res: value) (h: heap) ->
         let env = env |> StringMap.add id res in
-        symexec body env sdef Unit h k)
+        symexec body env sdef Unit h k assumption)
       in
-        symexec bound env sdef Unit h k
+        symexec bound env sdef Unit h k assumption
 | Id(_i, id) -> k (env |> StringMap.find id) h
 | BinOp(_i, op, lhs, rhs) ->
     let k = (fun (res_lhs: value) (h: heap) ->
@@ -142,39 +142,46 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
             k res_binop h
           )
         in
-          symexec rhs env sdef res h k
+          symexec rhs env sdef res h k assumption
       )
     in
-      symexec lhs env sdef res h k
+      symexec lhs env sdef res h k assumption
 | Assert(_i, assertion) ->
     let assert_env = env |> StringMap.add "result" res in
     let (assertion, sym, sort) = derive assertion assert_env h in
     let c = Z3.Expr.mk_const ctx sym sort in
     let eq = Z3.Boolean.mk_eq ctx assertion c in
     let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
-      solve [formula];
+      solve (formula :: assumption);
       k res h
 | Seq(_i, expr0, expr1) ->
     let k = (fun (res: value) (h: heap) ->
-        symexec expr1 env sdef res h k
+        symexec expr1 env sdef res h k assumption
       )
     in
-      symexec expr0 env sdef res h k
+      symexec expr0 env sdef res h k assumption
 | Cond(_i, cond, then_body, else_body) ->
     let k = (fun (_res: value) (h: heap) ->
       let (cond, sym, sort) = derive cond env h in
           let c = Z3.Expr.mk_const ctx sym sort in
           let eq = Z3.Boolean.mk_eq ctx cond c in
           let formula = Z3.Boolean.mk_and ctx [cond; eq; c] in
-            if (try solve [formula]; true with
-                | Unsatisfiable -> false
-                | Unknown -> raise (SymbolicExecutionException "symexec: Cond does not handle unknown yet!")) then
-              symexec then_body env sdef Unit h k
-            else
-              symexec else_body env sdef Unit h k
+            if (try solve (formula :: assumption); true with
+                | Unsatisfiable -> symexec else_body env sdef Unit h k assumption; false
+                | Unknown ->
+                    let k = (fun (_res: value) (h: heap) ->
+                        let formula = Z3.Boolean.mk_not ctx formula in
+                          symexec else_body env sdef Unit h k (formula :: assumption)
+                      )
+                    in
+                      symexec then_body env sdef Unit h k (formula :: assumption);
+                      false
+                )
+            then
+              symexec then_body env sdef Unit h k assumption
       )
     in
-      symexec cond env sdef res h k
+      symexec cond env sdef res h k assumption
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let verify (expr: expression) =
@@ -183,4 +190,4 @@ let verify (expr: expression) =
   let res = Unit in
   let h = IntMap.empty in
   let k = (fun (_res: value) (_h: heap) -> ()) in
-    symexec expr env sdef res h k
+    symexec expr env sdef res h k []
