@@ -115,6 +115,9 @@ let malloc (init_values: value list) (h: heap) : int * heap =
     in
       (max_available_loc, h |> IntMap.add max_available_loc init_values)
 
+(** Memory deallocation on the heap *)
+let mfree (loc: int) (h: heap) : heap = h |> IntMap.remove loc
+
 (** Memory featching from the heap *)
 let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : value =
   if IntMap.is_empty h then
@@ -129,6 +132,39 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
       else
         List.nth values_list off
     | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
+    )
+
+(** Replace nth element if the type matches *)
+let rec replace_nth (l: value list) (v: value) (n: int) : value list =
+  match l with
+  | [] -> []
+  | (x :: xs) ->
+      if n == 0 then
+        (match (x, v) with
+        | (Num(_), Num(_)) -> v :: xs
+        | (Loc(_), Loc(_)) -> v :: xs
+        | (Bool(_), Bool(_)) -> v :: xs (* should unit even be allowed on heap? it doesn't hold a value and data types cannot be changed afeterwards... *)
+        | (Unit, Unit) -> v :: xs
+        | _ -> raise (SymbolicExecutionException "mset cannot change data type of field!")
+        )
+      else
+        x :: replace_nth xs v (n-1)
+
+(** Memory mutation on the heap *)
+let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) : heap =
+  if IntMap.is_empty h then
+    raise (SymbolicExecutionException "mset cannot set anything on an empty heap!")
+  else
+    let values_list = IntMap.find loc h in
+    let td = sdef |> StringMap.find type_id in
+    (match List.find_index (fun (tid, _) -> String.equal tid field) td with
+    | Some off ->
+      if off < 0 || off >= List.length values_list then
+        raise (SymbolicExecutionException ("mget got offset out of range: " ^ string_of_int loc))
+      else
+        let values_list = replace_nth values_list v off in
+          h |> IntMap.add loc values_list
+    | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
     )
 
 let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
@@ -243,6 +279,14 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
       in
         let (loc, h) = malloc values_list h in
           k (Loc(loc, id)) h
+| Mfree(_i, loc) ->
+    let k = (fun (res: value) (h: heap) ->
+      match res with
+      | Loc(l, _id) -> k Unit (mfree l h)
+      | _ -> raise (SymbolicExecutionException "Mfree requires a base location!")
+      )
+    in
+      symexec loc env sdef Unit h k assumption
 | Mget(_i, loc, field) ->
     let k = (fun (res: value) (h: heap) ->
       (match res with
@@ -251,6 +295,19 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
       | _ -> raise (SymbolicExecutionException "Mget requires a location!")
       )
     )
+    in
+      symexec loc env sdef Unit h k assumption
+| Mset(_i, loc, field, expr) ->
+    let k = (fun (res: value) (h: heap) ->
+      match res with
+      | Loc(l, id) ->
+          let k = (fun (res: value) (h: heap) ->
+            k Unit (mset l field id res h sdef)
+            )
+          in
+            symexec expr env sdef Unit h k assumption
+      | _ -> raise (SymbolicExecutionException "Mset requires a location!")
+      )
     in
       symexec loc env sdef Unit h k assumption
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
