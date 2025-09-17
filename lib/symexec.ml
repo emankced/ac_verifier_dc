@@ -42,63 +42,6 @@ type struct_definitions = ((string * struct_type) list StringMap.t)
 (** Map that holds the heap store *)
 type heap = ((value list) IntMap.t)
 
-let rec derive (expr: expression) (env: environment) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
-| Num(i, n) ->
-    let sym = int_symbol i in
-    let c = Z3.Arithmetic.Integer.mk_const ctx sym in
-    let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
-      (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
-| Bool(i, b) ->
-    let sym = int_symbol i in
-    let c = Z3.Boolean.mk_const ctx sym in
-    let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
-      (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
-| BinOp(i, op, lhs, rhs) ->
-    let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env h in
-    let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env h in
-    let lhs_c = Z3.Expr.mk_const ctx lhs_sym lhs_sort in
-    let rhs_c = Z3.Expr.mk_const ctx rhs_sym rhs_sort in
-    let (v, is_int) =
-      (match op with
-      | Add -> (Z3.Arithmetic.mk_add ctx [lhs_c; rhs_c], true)
-      | Sub -> (Z3.Arithmetic.mk_sub ctx [lhs_c; rhs_c], true)
-      | Mul -> (Z3.Arithmetic.mk_mul ctx [lhs_c; rhs_c], true)
-      | Div -> (Z3.Arithmetic.mk_div ctx lhs_c rhs_c, true)
-      | Eq -> (Z3.Boolean.mk_eq ctx lhs_c rhs_c, false)
-      | Ne -> (Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs_c rhs_c), false)
-      | Le -> (Z3.Arithmetic.mk_le ctx lhs_c rhs_c, false)
-      | Lt -> (Z3.Arithmetic.mk_lt ctx lhs_c rhs_c, false)
-      | Ge -> (Z3.Arithmetic.mk_ge ctx lhs_c rhs_c, false)
-      | Gt -> (Z3.Arithmetic.mk_gt ctx lhs_c rhs_c, false)
-      | And -> (Z3.Boolean.mk_and ctx [lhs_c; rhs_c], false)
-      | Or -> (Z3.Boolean.mk_or ctx [lhs_c; rhs_c], false)
-      | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
-      ) in
-    let sym = int_symbol i in
-    if is_int then
-      let c = Z3.Arithmetic.Integer.mk_const ctx sym in
-      let eq = Z3.Boolean.mk_eq ctx c v in
-        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, int_sort)
-    else
-      let c = Z3.Boolean.mk_const ctx sym in
-      let eq = Z3.Boolean.mk_eq ctx c v in
-        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
-| Id(i, id) -> let v = env |> StringMap.find id in
-      (match v with
-      | Num(n) ->
-          let sym = int_symbol i in
-          let c = Z3.Arithmetic.Integer.mk_const ctx sym in
-          let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
-            (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
-      | Bool(b) ->
-          let sym = int_symbol i in
-          let c = Z3.Boolean.mk_const ctx sym in
-          let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
-            (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
-      | _ -> raise (SymbolicExecutionException "TODO: Derive Id does not support all types yet")
-      )
-| _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
-
 (** Memory allocation on the heap *)
 let malloc (init_values: value list) (h: heap) : int * heap =
   if List.length init_values == 0 then
@@ -167,7 +110,86 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
     )
 
-let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
+let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
+| Num(i, n) ->
+    let sym = int_symbol i in
+    let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+    let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
+      (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
+| Bool(i, b) ->
+    let sym = int_symbol i in
+    let c = Z3.Boolean.mk_const ctx sym in
+    let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
+      (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
+| BinOp(i, op, lhs, rhs) ->
+    let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env sdef h in
+    let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env sdef h in
+    let lhs_c = Z3.Expr.mk_const ctx lhs_sym lhs_sort in
+    let rhs_c = Z3.Expr.mk_const ctx rhs_sym rhs_sort in
+    let (v, is_int) =
+      (match op with
+      | Add -> (Z3.Arithmetic.mk_add ctx [lhs_c; rhs_c], true)
+      | Sub -> (Z3.Arithmetic.mk_sub ctx [lhs_c; rhs_c], true)
+      | Mul -> (Z3.Arithmetic.mk_mul ctx [lhs_c; rhs_c], true)
+      | Div -> (Z3.Arithmetic.mk_div ctx lhs_c rhs_c, true)
+      | Eq -> (Z3.Boolean.mk_eq ctx lhs_c rhs_c, false)
+      | Ne -> (Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs_c rhs_c), false)
+      | Le -> (Z3.Arithmetic.mk_le ctx lhs_c rhs_c, false)
+      | Lt -> (Z3.Arithmetic.mk_lt ctx lhs_c rhs_c, false)
+      | Ge -> (Z3.Arithmetic.mk_ge ctx lhs_c rhs_c, false)
+      | Gt -> (Z3.Arithmetic.mk_gt ctx lhs_c rhs_c, false)
+      | And -> (Z3.Boolean.mk_and ctx [lhs_c; rhs_c], false)
+      | Or -> (Z3.Boolean.mk_or ctx [lhs_c; rhs_c], false)
+      | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
+      ) in
+    let sym = int_symbol i in
+    if is_int then
+      let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+      let eq = Z3.Boolean.mk_eq ctx c v in
+        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, int_sort)
+    else
+      let c = Z3.Boolean.mk_const ctx sym in
+      let eq = Z3.Boolean.mk_eq ctx c v in
+        (Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr; eq], sym, bool_sort)
+| Id(i, id) -> let v = env |> StringMap.find id in
+      (match v with
+      | Num(n) ->
+          let sym = int_symbol i in
+          let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+          let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
+            (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
+      | Bool(b) ->
+          let sym = int_symbol i in
+          let c = Z3.Boolean.mk_const ctx sym in
+          let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
+            (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
+      | _ -> raise (SymbolicExecutionException "TODO: Derive Id does not support all types yet")
+      )
+| Mget(i, loc, field) ->
+    let l = ref Unit in
+    let k = (fun (res: value) (_h: heap) ->
+        l := res
+      )
+    in
+      symexec loc env sdef Unit h k [];
+      (match !l with
+      | Loc(v, id) -> (match (mget v field id h sdef) with
+        | Num(n) ->
+            let sym = int_symbol i in
+            let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+            let v = Z3.Arithmetic.Integer.mk_numeral_i ctx n in
+              (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
+        | Bool(b) ->
+            let sym = int_symbol i in
+            let c = Z3.Boolean.mk_const ctx sym in
+            let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
+              (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
+        | _ -> raise (SymbolicExecutionException "TODO: Derive Mget does not support all types yet")
+        )
+      | _ -> raise (SymbolicExecutionException "Derive: Mget needs a location!"))
+| _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
+
+and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
 | Bool(_i, b) -> k (Bool(b)) h
 | Null(_i) -> k (Loc(0, "")) h
@@ -216,7 +238,7 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
       symexec lhs env sdef res h k assumption
 | Assert(_i, assertion) ->
     let assert_env = env |> StringMap.add "result" res in
-    let (assertion, sym, sort) = derive assertion assert_env h in
+    let (assertion, sym, sort) = derive assertion assert_env sdef h in
     let c = Z3.Expr.mk_const ctx sym sort in
     let eq = Z3.Boolean.mk_eq ctx assertion c in
     let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
@@ -230,7 +252,7 @@ let rec symexec (expr: expression) (env: environment) (sdef: struct_definitions)
       symexec expr0 env sdef res h k assumption
 | Cond(_i, cond, then_body, else_body) ->
     let k = (fun (_res: value) (h: heap) ->
-      let (cond, sym, sort) = derive cond env h in
+      let (cond, sym, sort) = derive cond env sdef h in
           let c = Z3.Expr.mk_const ctx sym sort in
           let eq = Z3.Boolean.mk_eq ctx cond c in
           let formula = Z3.Boolean.mk_and ctx [cond; eq; c] in
