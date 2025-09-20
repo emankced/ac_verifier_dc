@@ -186,6 +186,15 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       | _ -> raise (TypeCheckError ("Assert:" ^ string_of_int i ^ " requires a bool expression as assertion!"))
       );
       (res, tm)
+| Invariant(i, inv, body) ->
+    let env = env |> StringMap.add "result" res in (*TODO: should the invariant have access to result?*)
+    let (t_assertion, _) = type_check inv env sdef tm Unit in
+      (match t_assertion with
+      | Bool -> ()
+      | _ -> raise (TypeCheckError ("Assert:" ^ string_of_int i ^ " requires a bool expression as assertion!"))
+      );
+      let (res, tm) = type_check body env sdef tm res in
+        (res, tm |> IntMap.add i res)
 (*| _ -> raise (TypeCheckError "TODO: implement all cases")*)
 
 (** Collects all used bound variable names of an expression *)
@@ -200,6 +209,7 @@ let rec bound_variables (expr: expression): StringSet.t = match expr with
 | Seq(_, expr0, expr1) -> StringSet.union (bound_variables expr0) (bound_variables expr1)
 | Cond(_, cond, then_body, else_body) -> StringSet.union (bound_variables cond) (StringSet.union (bound_variables then_body) (bound_variables else_body))
 | Assert(_, assertion) -> StringSet.filter (fun s -> not (String.equal s "result")) (bound_variables assertion)
+| Invariant(_, inv, body) -> StringSet.union (StringSet.filter (fun s -> not (String.equal s "result")) (bound_variables inv)) (bound_variables body)
 | Struct(_, _, _, body) -> bound_variables body
 | Malloc(_, _, exprs) -> List.fold_right (fun e set -> StringSet.union set (bound_variables e)) exprs StringSet.empty
 | Mfree(_, loc) -> bound_variables loc

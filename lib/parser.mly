@@ -59,6 +59,7 @@ let get i = let v = !i in i := v+1; v
 
 %token ASSERT
 %token RESULT
+%token INVARIANT
 
 %token STRUCT
 %token LBRACE
@@ -107,6 +108,7 @@ command:
 | DEREF; loc = term; DOT; field = ID; ASSIGN; e = expr { Mset(get i, loc, field, e) }
 | MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(get i, id, l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(get i, e) }
+| inv = invariant; WHILE; cond = expr; DO; body = command { Invariant(get i, inv, While(get i, cond, body)) }
 | WHILE; cond = expr; DO; body = command { While(get i, cond, body) }
 | FOR; id = ID; IN; LBRACKET; start = expr; TO; end_ = expr; RBRACKET; DO; body = command { For(get i, id, start, end_, body) }
 | LPARAN; c = command; RPARAN { c }
@@ -155,6 +157,10 @@ term:
 
 assertion:
 | ASSERT; a = assert_expr; ASSERT { a }
+;
+
+invariant:
+| ASSERT; INVARIANT; a = assert_expr; ASSERT { a }
 ;
 
 assert_expr:

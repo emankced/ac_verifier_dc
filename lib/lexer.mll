@@ -57,5 +57,6 @@ rule read =
   | '.' { DOT }
   | ':' { COLON }
   | "result" { RESULT }
+  | "invariant" { INVARIANT }
   | id { ID (Lexing.lexeme lexbuf) }
   | eof { EOF }

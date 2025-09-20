@@ -201,6 +201,7 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         | _ -> raise (InterpreterException "For requires numbers for iterating!")
         )
 | Assert(_i, _assertion) -> res, h
+| Invariant(_i, _inv, body) -> interp body env sdef res h
 
 let (===) (lhs: value) (rhs: value) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
