@@ -332,6 +332,35 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       )
     in
       symexec loc env sdef Unit h k assumption
+| Invariant(_, inv, While(_, cond, _body)) ->
+    (* k for checking the invariant*)
+    let k_check_inv = (fun (res: value) (h: heap) ->
+      let inv_env = env |> StringMap.add "result" res in
+      let (inv, inv_sym, inv_sort) = derive inv inv_env sdef h in
+      let inv_c = Z3.Expr.mk_const ctx inv_sym inv_sort in
+        solve [inv; inv_c]
+      )
+    in
+      (* k for cond=false and invariant*)
+      let k_cond_false = (fun (res: value) (h: heap) ->
+        let (cond, cond_sym, cond_sort) = derive cond env sdef h in
+        let cond_c = Z3.Expr.mk_const ctx cond_sym cond_sort in
+        let inv_env = env |> StringMap.add "result" res in
+        let (inv, inv_sym, inv_sort) = derive inv inv_env sdef h in
+        let inv_c = Z3.Expr.mk_const ctx inv_sym inv_sort in
+        if try solve [cond; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
+        | _ -> false
+        then
+          k res h
+        else
+          (*TODO invalidate heap and retry*)
+          raise (SymbolicExecutionException "symexec invariant invalidate heap is not yet implemented")
+        )
+      in
+        k_check_inv res h;
+        k_cond_false res h;
+        (*TODO handle actual body execution*)
+        raise (SymbolicExecutionException "symexec invariant TODO")
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let verify (expr: expression) =
