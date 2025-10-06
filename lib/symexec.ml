@@ -110,6 +110,21 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
     )
 
+let invalidate (h: heap): heap =
+  IntMap.map
+    (fun vl ->
+      List.map
+        (fun v ->
+          match v with
+          | Num(_) -> InvalidatedNum
+          | Bool(_) -> InvalidatedBool
+          | Loc(_, id) -> InvalidatedLoc(id)
+          | v -> v
+        )
+        vl
+    )
+    h
+
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
     let sym = int_symbol i in
@@ -353,8 +368,14 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         then
           k res h
         else
-          (*TODO invalidate heap and retry*)
-          raise (SymbolicExecutionException "symexec invariant invalidate heap is not yet implemented")
+          (*invalidate heap and retry*)
+          let h = invalidate h in
+            if try solve [cond; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
+            | _ -> false
+            then
+              k res h
+            else
+              raise (SymbolicExecutionException "symexec cannot prove loop will terminate at some point TODO")
         )
       in
         k_check_inv res h;
