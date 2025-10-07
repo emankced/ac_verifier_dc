@@ -347,7 +347,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       )
     in
       symexec loc env sdef Unit h k assumption
-| Invariant(_, inv, While(_, cond, _body)) ->
+| Invariant(_, inv, While(_, cond, body)) ->
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) ->
       let inv_env = env |> StringMap.add "result" res in
@@ -371,17 +371,38 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           (*invalidate heap and retry*)
           let h = invalidate h in
             if try solve [cond; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
-            | _ -> false
+            | Unknown -> true
+            | Unsatisfiable -> false
             then
               k res h
             else
               raise (SymbolicExecutionException "symexec cannot prove loop will terminate at some point TODO")
         )
       in
-        k_check_inv res h;
-        k_cond_false res h;
-        (*TODO handle actual body execution*)
-        raise (SymbolicExecutionException "symexec invariant TODO")
+        (* k for cond=true and invariant*)
+        let k_cond_true = (fun (res: value) (h: heap) ->
+        let (cond, cond_sym, cond_sort) = derive cond env sdef h in
+        let cond_c = Z3.Expr.mk_const ctx cond_sym cond_sort in
+        let inv_env = env |> StringMap.add "result" res in
+        let (inv, inv_sym, inv_sort) = derive inv inv_env sdef h in
+        let inv_c = Z3.Expr.mk_const ctx inv_sym inv_sort in
+        if try solve [cond; cond_c; inv; inv_c]; true with
+        | Unknown -> raise (SymbolicExecutionException "symexec cannot prove loop will terminate at some point")
+        | Unsatisfiable -> false
+        then
+          let k = (fun (res: value) (h: heap) ->
+              k_check_inv res h;
+              symexec expr env sdef Unit h k assumption
+            )
+          in
+            symexec body env sdef Unit h k assumption
+        else
+          k res h
+        )
+        in
+          k_check_inv res h;
+          k_cond_false res h;
+          k_cond_true res h
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
 
 let verify (expr: expression) =
