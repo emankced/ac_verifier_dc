@@ -127,3 +127,16 @@ let%test "Verify shadowing 3" =
         let x := 10 in
           @ x == 10 @;
           x"
+
+let%test "Verify heap 1" =
+  vf "struct num { n: int } in
+      let x := malloc(num, 5) in
+        !x.n := 3;
+        (if !x.n > 4 then
+          !x.n := 42
+        else
+          !x.n := 1337
+        );
+        !x.n;
+        @ result == 1337 @;
+        mfree(x)"
