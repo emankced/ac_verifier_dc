@@ -164,7 +164,7 @@ invariant:
 ;
 
 assert_expr:
-| e = expr_no_deref { e }
+| e = expr_with_result { e }
 | lhs = assert_expr; SEP; rhs = assert_expr { BinOp(get i, Sep, lhs, rhs) }
 | lhs = assert_expr; SEPIMP; rhs = assert_expr { BinOp(get i, SepImp, lhs, rhs) }
 | lhs = assert_expr; POINTSTO; rhs = assert_expr { BinOp(get i, PointsTo, lhs, rhs) }
@@ -172,23 +172,23 @@ assert_expr:
 (* TODO: predicates, forall, (exists,) always *)
 ;
 
-expr_no_deref:
-| t = term_no_deref { t }
-| lhs = expr_no_deref; ADD; rhs = expr_no_deref { BinOp(get i, Add, lhs, rhs) }
-| lhs = expr_no_deref; SUB; rhs = expr_no_deref { BinOp(get i, Sub, lhs, rhs) }
-| lhs = expr_no_deref; MUL; rhs = expr_no_deref { BinOp(get i, Mul, lhs, rhs) }
-| lhs = expr_no_deref; DIV; rhs = expr_no_deref { BinOp(get i, Div, lhs, rhs) }
-| lhs = expr_no_deref; EQ; rhs = expr_no_deref { BinOp(get i, Eq, lhs, rhs) }
-| lhs = expr_no_deref; NE; rhs = expr_no_deref { BinOp(get i, Ne, lhs, rhs) }
-| lhs = expr_no_deref; LE; rhs = expr_no_deref { BinOp(get i, Le, lhs, rhs) }
-| lhs = expr_no_deref; LT; rhs = expr_no_deref { BinOp(get i, Lt, lhs, rhs) }
-| lhs = expr_no_deref; GE; rhs = expr_no_deref { BinOp(get i, Ge, lhs, rhs) }
-| lhs = expr_no_deref; GT; rhs = expr_no_deref { BinOp(get i, Gt, lhs, rhs) }
-| lhs = expr_no_deref; AND; rhs = expr_no_deref { BinOp(get i, And, lhs, rhs) }
-| lhs = expr_no_deref; OR; rhs = expr_no_deref { BinOp(get i, Or, lhs, rhs) }
+expr_with_result:
+| t = term_with_result { t }
+| lhs = expr_with_result; ADD; rhs = expr_with_result { BinOp(get i, Add, lhs, rhs) }
+| lhs = expr_with_result; SUB; rhs = expr_with_result { BinOp(get i, Sub, lhs, rhs) }
+| lhs = expr_with_result; MUL; rhs = expr_with_result { BinOp(get i, Mul, lhs, rhs) }
+| lhs = expr_with_result; DIV; rhs = expr_with_result { BinOp(get i, Div, lhs, rhs) }
+| lhs = expr_with_result; EQ; rhs = expr_with_result { BinOp(get i, Eq, lhs, rhs) }
+| lhs = expr_with_result; NE; rhs = expr_with_result { BinOp(get i, Ne, lhs, rhs) }
+| lhs = expr_with_result; LE; rhs = expr_with_result { BinOp(get i, Le, lhs, rhs) }
+| lhs = expr_with_result; LT; rhs = expr_with_result { BinOp(get i, Lt, lhs, rhs) }
+| lhs = expr_with_result; GE; rhs = expr_with_result { BinOp(get i, Ge, lhs, rhs) }
+| lhs = expr_with_result; GT; rhs = expr_with_result { BinOp(get i, Gt, lhs, rhs) }
+| lhs = expr_with_result; AND; rhs = expr_with_result { BinOp(get i, And, lhs, rhs) }
+| lhs = expr_with_result; OR; rhs = expr_with_result { BinOp(get i, Or, lhs, rhs) }
 ;
 
-term_no_deref:
+term_with_result:
 | n = NUM { Num(get i, n) }
 | SUB; n = NUM { Num(get i, -n) }
 | TRUE { Bool(get i, true) }
@@ -196,9 +196,10 @@ term_no_deref:
 | NULL { Null(get i) }
 | NOT; TRUE { Bool(get i, false) }
 | NOT; FALSE { Bool(get i, true) }
-| LPARAN; e = expr_no_deref; RPARAN { e }
-| SUB; LPARAN; e = expr_no_deref; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
-| NOT; LPARAN; e = expr_no_deref; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
+| LPARAN; e = expr_with_result; RPARAN { e }
+| SUB; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
+| NOT; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
+| DEREF; loc = term; DOT; field = ID { Mget(get i, loc, field) }
 | SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
 | NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
 | RESULT {Id(get i, "result")}
