@@ -199,6 +199,12 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
             let c = Z3.Boolean.mk_const ctx sym in
             let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
               (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
+        | InvalidatedNum ->
+            let sym = int_symbol i in
+              (Z3.Boolean.mk_true ctx, sym, int_sort)
+        | InvalidatedBool ->
+            let sym = int_symbol i in
+              (Z3.Boolean.mk_true ctx, sym, bool_sort)
         | _ -> raise (SymbolicExecutionException "TODO: Derive Mget does not support all types yet")
         )
       | _ -> raise (SymbolicExecutionException "Derive: Mget needs a location!"))
@@ -358,19 +364,21 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       (* k for cond=false and invariant*)
       let k_cond_false = (fun (res: value) (h: heap) ->
-        let (cond, cond_sym, cond_sort) = derive cond env sdef h in
+        let (cond_form, cond_sym, cond_sort) = derive cond env sdef h in
         let cond_c = Z3.Expr.mk_const ctx cond_sym cond_sort in
         let inv_env = env |> StringMap.add "result" res in
         let (inv, inv_sym, inv_sort) = derive inv inv_env sdef h in
         let inv_c = Z3.Expr.mk_const ctx inv_sym inv_sort in
-        if try solve [cond; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
+        if try solve [cond_form; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
         | _ -> false
         then
           k res h
         else
           (*invalidate heap and retry*)
           let h = invalidate h in
-            if try solve [cond; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
+          let (cond_form, cond_sym, cond_sort) = derive cond env sdef h in
+          let cond_c = Z3.Expr.mk_const ctx cond_sym cond_sort in
+            if try solve [cond_form; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
             | Unknown -> true
             | Unsatisfiable -> false
             then
