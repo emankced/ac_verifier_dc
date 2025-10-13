@@ -140,3 +140,35 @@ let%test "Verify heap 1" =
         !x.n;
         @ result == 1337 @;
         mfree(x)"
+
+let%test "Verify loop 1" =
+  vf "struct num { n: int } in
+      let x := malloc(num, 5) in
+        @ invariant !x.n >= 0 @
+        while !x.n > 0 do
+          !x.n := !x.n - 1"
+
+let%test "Verify loop 2" =
+  vf "struct num { n: int } in
+      let x := malloc(num, 5) in
+        @ invariant !x.n >= 0 @
+        while !x.n != 5 do
+          !x.n := !x.n - 1"
+
+let%test "Verify loop 3" =
+  vf "struct num { n: int } in
+      let x := malloc(num, 5) in
+      let sum := malloc(num, 0) in
+        (@ invariant !x.n >= 0 && !sum.n >= 0 @
+        while !x.n > 0 do
+          !sum.n := !sum.n + !x.n;
+          !x.n := !x.n - 1);
+        @ !sum.n == 15 @;
+        !sum.n"
+
+let%test "Verify loop 4" =
+  not (vf "struct num { n: int } in
+          let x := malloc(num, 5) in
+            @ invariant !x.n > 0 @
+            while !x.n > 0 do
+              !x.n := !x.n - 1")
