@@ -101,14 +101,14 @@ type_:
 ;
 
 command:
-| a = assertion { Assert(get i, a) }
+| ASSERT; a = assrt; ASSERT { Assert(get i, a) }
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(get i, id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(get i, cond, then_body, else_body) }
 | IF; cond = expr; THEN; then_body = command { Cond(get i, cond, then_body, Unit(get i)) }
 | DEREF; loc = term; DOT; field = ID; ASSIGN; e = expr { Mset(get i, loc, field, e) }
 | MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(get i, id, l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(get i, e) }
-| inv = invariant; WHILE; cond = expr; DO; body = command { Invariant(get i, inv, While(get i, cond, body)) }
+| ASSERT; INVARIANT; inv = assrt; ASSERT; WHILE; cond = expr; DO; body = command { Invariant(get i, inv, While(get i, cond, body)) }
 | WHILE; cond = expr; DO; body = command { While(get i, cond, body) }
 | FOR; id = ID; IN; LBRACKET; start = expr; TO; end_ = expr; RBRACKET; DO; body = command { For(get i, id, start, end_, body) }
 | LPARAN; c = command; RPARAN { c }
@@ -155,20 +155,12 @@ term:
 | id = ID; { Id(get i, id) }
 ;
 
-assertion:
-| ASSERT; a = assert_expr; ASSERT { a }
-;
-
-invariant:
-| ASSERT; INVARIANT; a = assert_expr; ASSERT { a }
-;
-
-assert_expr:
+assrt:
 | e = expr_with_result { e }
-| lhs = assert_expr; SEP; rhs = assert_expr { BinOp(get i, Sep, lhs, rhs) }
-| lhs = assert_expr; SEPIMP; rhs = assert_expr { BinOp(get i, SepImp, lhs, rhs) }
-| lhs = assert_expr; POINTSTO; rhs = assert_expr { BinOp(get i, PointsTo, lhs, rhs) }
-| LPARAN; e = assert_expr; RPARAN { e }
+| lhs = assrt; SEP; rhs = assrt { BinOp(get i, Sep, lhs, rhs) }
+| lhs = assrt; SEPIMP; rhs = assrt { BinOp(get i, SepImp, lhs, rhs) }
+| lhs = assrt; POINTSTO; rhs = assrt { BinOp(get i, PointsTo, lhs, rhs) }
+| LPARAN; e = assrt; RPARAN { e }
 (* TODO: predicates, forall, (exists,) always *)
 ;
 
