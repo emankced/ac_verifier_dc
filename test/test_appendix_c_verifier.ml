@@ -128,3 +128,12 @@ let%test "Parse for loop" =
 
 let%test "Parse while loop" =
   (let (v, _) = (interp (parse "struct num { n: int } in let sum := malloc(num, 1) in (while !sum.n < 20 do !sum.n := !sum.n + !sum.n); !sum.n") env sdef Unit h) in v) === Num(32)
+
+let%test "Parse assert 1" =
+  (let (v, _) = (interp (parse "@ true @") env sdef Unit h) in v) === Unit
+
+let%test "Parse assert 2" =
+  (let (v, _) = (interp (parse "@ true ** false @") env sdef Unit h) in v) === Unit
+
+let%test "Parse invariant" =
+  (let (v, _) = (interp (parse "@ invariant true @ while false do 5") env sdef Unit h) in v) === Unit
