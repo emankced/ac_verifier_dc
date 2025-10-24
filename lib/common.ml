@@ -6,3 +6,6 @@ module IntMap = Map.Make(Int)
 
 (** A set to collect strings *)
 module StringSet = Set.Make(String)
+
+(** A set to collect ints *)
+module IntSet = Set.Make(Int)

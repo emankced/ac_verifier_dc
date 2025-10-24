@@ -155,6 +155,7 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
       | Gt -> (Z3.Arithmetic.mk_gt ctx lhs_c rhs_c, false)
       | And -> (Z3.Boolean.mk_and ctx [lhs_c; rhs_c], false)
       | Or -> (Z3.Boolean.mk_or ctx [lhs_c; rhs_c], false)
+      | Sep -> (Z3.Boolean.mk_and ctx [lhs_c; rhs_c], false) (* separation check is not done by derive *)
       | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
       ) in
     let sym = int_symbol i in
@@ -258,6 +259,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec lhs env sdef res h k assumption
 | Assert(_i, assertion) ->
+    let _ = check_separation assertion env sdef h in
     let assert_env = env |> StringMap.add "result" res in
     let (assertion, sym, sort) = derive assertion assert_env sdef h in
     let c = Z3.Expr.mk_const ctx sym sort in
@@ -354,6 +356,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec loc env sdef Unit h k assumption
 | Invariant(_, inv, While(_, cond, body)) ->
+    let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) ->
       let inv_env = env |> StringMap.add "result" res in
@@ -412,6 +415,33 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           k_cond_false res h;
           k_cond_true res h
 | _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
+
+and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): IntSet.t = match a with
+| BinOp(_, Sep, lhs, rhs) ->
+    let lhs = check_separation lhs env sdef h in
+    let rhs = check_separation rhs env sdef h in
+      if IntSet.disjoint lhs rhs then
+        IntSet.union lhs rhs
+      else
+        raise (SymbolicExecutionException "Separation violated!")
+| BinOp(_, _, lhs, rhs) -> IntSet.union (check_separation lhs env sdef h) (check_separation rhs env sdef h)
+| Null(_) -> IntSet.empty
+| Num(_, _) -> IntSet.empty
+| Bool(_, _) -> IntSet.empty
+| Unit(_) -> IntSet.empty
+| Id(_, _) -> IntSet.empty
+| Mget(_, loc, _) ->
+    let r = ref Unit in
+    let k = (fun (res: value) (_h: heap) ->
+        r := res
+      ) in
+      symexec loc env sdef Unit h k [];
+      (match !r with
+      | InvalidatedLoc(_) -> raise (SymbolicExecutionException "Separation violated due to invalidated location!")
+      | Loc(l, _) -> IntSet.empty |> IntSet.add l
+      | _ -> raise (SymbolicExecutionException "check_separation expected location!")
+      )
+| _ -> raise (SymbolicExecutionException "check_separation does not support this AST node!")
 
 let verify (expr: expression) =
   let env = StringMap.empty in
