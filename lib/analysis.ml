@@ -61,6 +61,7 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         | (Gt, Num, Num) -> Bool
         | (And, Bool, Bool) -> Bool
         | (Or, Bool, Bool) -> Bool
+        | (Sep, Bool, Bool) -> Bool
         | (_, lhs, rhs) -> raise (TypeCheckError ("BinOp:" ^ string_of_int i ^ " Operator and operands do not match: " ^ types_to_string lhs ^ " and " ^ types_to_string rhs))
         ) in (t, tm |> IntMap.add i t)
 | Id(i, id) -> let t = env |> StringMap.find id in (t, tm |> IntMap.add i t)
