@@ -158,8 +158,8 @@ term:
 assrt:
 | e = expr_with_result { e }
 | lhs = assrt; SEP; rhs = assrt { BinOp(get i, Sep, lhs, rhs) }
-| lhs = assrt; SEPIMP; rhs = assrt { BinOp(get i, SepImp, lhs, rhs) }
-| lhs = assrt; POINTSTO; rhs = assrt { BinOp(get i, PointsTo, lhs, rhs) }
+(*| lhs = assrt; SEPIMP; rhs = assrt { BinOp(get i, SepImp, lhs, rhs) }*)
+(*| lhs = assrt; POINTSTO; rhs = assrt { BinOp(get i, PointsTo, lhs, rhs) }*)
 | LPARAN; e = assrt; RPARAN { e }
 (* TODO: predicates, forall, (exists,) always *)
 ;
