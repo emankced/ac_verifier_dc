@@ -115,3 +115,8 @@ let%test "Type check While mismatch" =
     with
       | TypeCheckError _ -> true
       | _ -> false
+
+let%test "Type check Assert" =
+  let prog = parse "@ true ** false @" in
+    let (res, _) = type_check prog env sdef tm Unit in
+      res == Unit
