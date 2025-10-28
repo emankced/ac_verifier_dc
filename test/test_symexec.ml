@@ -172,3 +172,35 @@ let%test "Verify loop 4" =
             @ invariant !x.n > 0 @
             while !x.n > 0 do
               !x.n := !x.n - 1")
+
+let%test "Verify loop 5" =
+  vf "struct num { n: int } in
+      let x := malloc(num, 5) in
+      let sum := malloc(num, 0) in
+        (@ invariant !x.n >= 0 ** !sum.n >= 0 @
+        while !x.n > 0 do
+          !sum.n := !sum.n + !x.n;
+          !x.n := !x.n - 1);
+        @ !sum.n == 15 @;
+        !sum.n"
+
+let%test "Verify loop 6" =
+  not (vf "struct num { n: int } in
+          let x := malloc(num, 5) in
+          let sum := malloc(num, 0) in
+            (@ invariant !x.n >= 0 ** !sum.n >= 0 ** !sum.n >= 0 @
+            while !x.n > 0 do
+              !sum.n := !sum.n + !x.n;
+              !x.n := !x.n - 1);
+            @ !sum.n == 15 @;
+            !sum.n")
+
+let%test "Verify loop 7" =
+  vf "struct list { x: int, xs: list } in
+      struct pointer { l: list } in
+      let t := malloc(list, 5, null) in
+      let h := malloc(list, 3, t) in
+      let c := malloc(pointer, h) in
+        @ invariant true @
+        while !c.l != null do
+          !c.l := !!c.l.xs"
