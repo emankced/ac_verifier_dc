@@ -421,11 +421,10 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           in
             symexec body env sdef Unit h k assumption
         else
-          k res h
+          k_cond_false res h
         )
         in
           k_check_inv res h;
-          k_cond_false res h;
           k_cond_true res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
