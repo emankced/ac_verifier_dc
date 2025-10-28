@@ -136,6 +136,11 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
     let c = Z3.Boolean.mk_const ctx sym in
     let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
       (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
+| Null(i) ->
+    let sym = int_symbol i in
+    let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+    let v = Z3.Arithmetic.Integer.mk_numeral_i ctx 0 in
+      (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
 | BinOp(i, op, lhs, rhs) ->
     let (lhs_expr, lhs_sym, lhs_sort) = derive lhs env sdef h in
     let (rhs_expr, rhs_sym, rhs_sort) = derive rhs env sdef h in
