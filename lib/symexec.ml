@@ -184,6 +184,11 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
           let c = Z3.Boolean.mk_const ctx sym in
           let v = if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx in
             (Z3.Boolean.mk_eq ctx c v, sym, bool_sort)
+      | Loc(l, _) ->
+          let sym = int_symbol i in
+          let c = Z3.Arithmetic.Integer.mk_const ctx sym in
+          let v = Z3.Arithmetic.Integer.mk_numeral_i ctx l in
+            (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
       | _ -> raise (SymbolicExecutionException "TODO: Derive Id does not support all types yet")
       )
 | Mget(i, loc, field) ->
