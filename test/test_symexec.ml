@@ -204,3 +204,18 @@ let%test "Verify loop 7" =
         @ invariant true @
         while !c.l != null do
           !c.l := !!c.l.xs"
+
+let%test "Verify loop 8" =
+  vf "struct list { x: int, xs: list } in
+      struct pointer { l: list } in
+      struct num { n: int } in
+      let t := malloc(list, 5, null) in
+      let h := malloc(list, 3, t) in
+      let c := malloc(pointer, h) in
+      let sum := malloc(num, 0) in
+        (@ invariant !sum.n >= 0 ** c == c @
+        while !c.l != null do
+          !sum.n := !sum.n + !!c.l.x;
+          !c.l := !!c.l.xs);
+        !sum.n;
+        @ result == 8 @"
