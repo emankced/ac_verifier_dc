@@ -222,7 +222,7 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
         | _ -> raise (SymbolicExecutionException "TODO: Derive Mget does not support all types yet")
         )
       | _ -> raise (SymbolicExecutionException "Derive: Mget needs a location!"))
-| _ -> raise (SymbolicExecutionException "TODO: Derive does not support this AST node (yet?)")
+| _ -> raise (SymbolicExecutionException ("TODO: Derive does not support this AST node (yet?): " ^ string_of_expression expr))
 
 and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
@@ -427,7 +427,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           k_check_inv res h;
           k_cond_false res h;
           k_cond_true res h
-| _ -> raise (SymbolicExecutionException "symexec does not support this AST node (yet?)")
+| _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
 and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): IntSet.t = match a with
 | BinOp(_, Sep, lhs, rhs) ->
