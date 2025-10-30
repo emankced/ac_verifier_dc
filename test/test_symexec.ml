@@ -219,3 +219,8 @@ let%test "Verify loop 8" =
           !c.l := !!c.l.xs);
         !sum.n;
         @ result == 8 @"
+
+let%test "Verify loop 9" =
+  not (vf "@ invariant true @
+          while true do
+            5")
