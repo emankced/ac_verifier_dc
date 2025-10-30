@@ -189,6 +189,15 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
           let c = Z3.Arithmetic.Integer.mk_const ctx sym in
           let v = Z3.Arithmetic.Integer.mk_numeral_i ctx l in
             (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
+      | InvalidatedNum ->
+          let sym = int_symbol i in
+            (Z3.Boolean.mk_true ctx, sym, int_sort)
+      | InvalidatedBool ->
+          let sym = int_symbol i in
+            (Z3.Boolean.mk_true ctx, sym, bool_sort)
+      | InvalidatedLoc(_) ->
+          let sym = int_symbol i in
+            (Z3.Boolean.mk_true ctx, sym, int_sort)
       | _ -> raise (SymbolicExecutionException "TODO: Derive Id does not support all types yet")
       )
 | Mget(i, loc, field) ->
@@ -217,13 +226,13 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
               (Z3.Boolean.mk_eq ctx c v, sym, int_sort)
         | InvalidatedNum ->
             let sym = int_symbol i in
-              (Z3.Boolean.mk_false ctx, sym, int_sort)
+              (Z3.Boolean.mk_true ctx, sym, int_sort)
         | InvalidatedBool ->
             let sym = int_symbol i in
-              (Z3.Boolean.mk_false ctx, sym, bool_sort)
+              (Z3.Boolean.mk_true ctx, sym, bool_sort)
         | InvalidatedLoc(_) ->
             let sym = int_symbol i in
-              (Z3.Boolean.mk_false ctx, sym, int_sort)
+              (Z3.Boolean.mk_true ctx, sym, int_sort)
         | _ -> raise (SymbolicExecutionException "TODO: Derive Mget does not support all types yet")
         )
       | _ -> raise (SymbolicExecutionException "Derive: Mget needs a location!"))
@@ -430,6 +439,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         )
         in
           k_check_inv res h;
+          k_cond_false res h;
           k_cond_true res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
