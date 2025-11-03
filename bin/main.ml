@@ -4,7 +4,7 @@ open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Analysis
 open Appendix_c_verifier.Symexec
 open Appendix_c_verifier.Common
-(*open Appendix_c_verifier.Preproc*)
+open Appendix_c_verifier.Preproc
 
 let () = print_endline "Appendix C Verifier"; print_newline ()
 
@@ -46,6 +46,7 @@ let () = if String.equal "" !input_file then
       !lines
   in
     let prog = parse src in
+    let prog = ssa prog "" "" in
       (if !print_ast then
         (print_endline "AST:";
         print_endline (string_of_expression prog);
