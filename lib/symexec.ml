@@ -1,5 +1,5 @@
 open Ast
-(*open Analysis*)
+open Analysis
 open Common
 
 let ctx = Z3.mk_context [("proof", "true")]
@@ -31,6 +31,7 @@ type value =
 | InvalidatedNum
 | InvalidatedBool
 | InvalidatedLoc of string
+| Formula of expression list
 | Unit
 
 (** Map that holds the environment store *)
@@ -125,6 +126,34 @@ let invalidate (h: heap): heap =
     )
     h
 
+let rec formulae_of_id (id: string) (code: expression) : expression list = match code with
+| BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
+  (match
+    let cmp = (fun s -> String.equal id s) in
+      bound_variables lhs |> StringSet.exists cmp,
+      bound_variables rhs |> StringSet.exists cmp
+  with
+  | true, true -> List.append (formulae_of_id id lhs) (formulae_of_id id rhs)
+  | true, false -> formulae_of_id id lhs
+  | false, true -> formulae_of_id id rhs
+  | false, false -> []
+  )
+| x -> [x]
+
+let formulae_of_deref (id: string) (code: expression) : expression list = match code with
+| BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
+  (match
+    let cmp = (fun s -> String.equal id s) in
+      bound_variables lhs |> StringSet.exists cmp,
+      bound_variables rhs |> StringSet.exists cmp
+  with
+  | true, true -> List.append (formulae_of_id id lhs) (formulae_of_id id rhs)
+  | true, false -> formulae_of_id id lhs
+  | false, true -> formulae_of_id id rhs
+  | false, false -> []
+  )
+| x -> [x]
+
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Symbol.symbol * Z3.Sort.sort = match expr with
 | Num(i, n) ->
     let sym = int_symbol i in
@@ -206,7 +235,7 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
         l := res
       )
     in
-      symexec loc env sdef Unit h k [];
+      symexec loc env sdef Unit h k;
       (match !l with
       | Loc(v, id) -> (match (mget v field id h sdef) with
         | Num(n) ->
@@ -238,7 +267,7 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
       | _ -> raise (SymbolicExecutionException "Derive: Mget needs a location!"))
 | _ -> raise (SymbolicExecutionException ("TODO: Derive does not support this AST node (yet?): " ^ string_of_expression expr))
 
-and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit) (assumption: Z3.Expr.expr list): unit = match expr with
+and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
 | Bool(_i, b) -> k (Bool(b)) h
 | Null(_i) -> k (Loc(0, "")) h
@@ -250,9 +279,9 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     else
       let k = (fun (res: value) (h: heap) ->
         let env = env |> StringMap.add id res in
-        symexec body env sdef Unit h k assumption)
+        symexec body env sdef Unit h k)
       in
-        symexec bound env sdef Unit h k assumption
+        symexec bound env sdef Unit h k
 | Id(_i, id) -> k (env |> StringMap.find id) h
 | BinOp(_i, op, lhs, rhs) ->
     let k = (fun (res_lhs: value) (h: heap) ->
@@ -281,10 +310,10 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             k res_binop h
           )
         in
-          symexec rhs env sdef res h k assumption
+          symexec rhs env sdef res h k
       )
     in
-      symexec lhs env sdef res h k assumption
+      symexec lhs env sdef res h k
 | Assert(_i, assertion) ->
     let _ = check_separation assertion env sdef h in
     let assert_env = env |> StringMap.add "result" res in
@@ -292,36 +321,30 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let c = Z3.Expr.mk_const ctx sym sort in
     let eq = Z3.Boolean.mk_eq ctx assertion c in
     let formula = Z3.Boolean.mk_and ctx [assertion; eq; c] in
-      solve (formula :: assumption);
+      solve [formula];
       k res h
 | Seq(_i, expr0, expr1) ->
     let k = (fun (res: value) (h: heap) ->
-        symexec expr1 env sdef res h k assumption
+        symexec expr1 env sdef res h k
       )
     in
-      symexec expr0 env sdef res h k assumption
+      symexec expr0 env sdef res h k
 | Cond(_i, cond, then_body, else_body) ->
     let k = (fun (_res: value) (h: heap) ->
       let (cond, sym, sort) = derive cond env sdef h in
           let c = Z3.Expr.mk_const ctx sym sort in
           let eq = Z3.Boolean.mk_eq ctx cond c in
           let formula = Z3.Boolean.mk_and ctx [cond; eq; c] in
-            if (try solve (formula :: assumption); true with
-                | Unsatisfiable -> symexec else_body env sdef Unit h k assumption; false
+            if (try solve [formula]; true with
+                | Unsatisfiable -> symexec else_body env sdef Unit h k; false
                 | Unknown ->
-                    let k = (fun (_res: value) (h: heap) ->
-                        let formula = Z3.Boolean.mk_not ctx formula in
-                          symexec else_body env sdef Unit h k (formula :: assumption)
-                      )
-                    in
-                      symexec then_body env sdef Unit h k (formula :: assumption);
-                      false
+                    raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
                 )
             then
-              symexec then_body env sdef Unit h k assumption
+              symexec then_body env sdef Unit h k
       )
     in
-      symexec cond env sdef res h k assumption
+      symexec cond env sdef res h k
 | Struct(_i, id, fields, body) ->
     if List.length fields == 0 then
       raise (SymbolicExecutionException "Field list cannot be empty for struct construction!")
@@ -329,7 +352,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       raise (SymbolicExecutionException "Struct name is already used!")
     else
       let sdef = sdef |> StringMap.add id fields in
-        symexec body env sdef Unit h k assumption
+        symexec body env sdef Unit h k
 | Malloc(_i, id, exprs) ->
     (*TODO check that the expression list matches the expected types *)
     let _expected_types = sdef |> StringMap.find id in
@@ -343,7 +366,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             value_h := h
           )
           in
-            symexec expr env sdef Unit h concat assumption;
+            symexec expr env sdef Unit h concat;
             (!value :: values_list, !value_h)
         )
         exprs
@@ -358,7 +381,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       | _ -> raise (SymbolicExecutionException "Mfree requires a base location!")
       )
     in
-      symexec loc env sdef Unit h k assumption
+      symexec loc env sdef Unit h k
 | Mget(_i, loc, field) ->
     let k = (fun (res: value) (h: heap) ->
       (match res with
@@ -368,7 +391,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       )
     )
     in
-      symexec loc env sdef Unit h k assumption
+      symexec loc env sdef Unit h k
 | Mset(_i, loc, field, expr) ->
     let k = (fun (res: value) (h: heap) ->
       match res with
@@ -377,12 +400,28 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             k Unit (mset l field id res h sdef)
             )
           in
-            symexec expr env sdef Unit h k assumption
+            symexec expr env sdef Unit h k
       | _ -> raise (SymbolicExecutionException "Mset requires a location!")
       )
     in
-      symexec loc env sdef Unit h k assumption
+      symexec loc env sdef Unit h k
 | Invariant(_, inv, While(_, cond, body)) ->
+    let assumption = BinOp(-1, And, inv, cond) in
+    let assumption_ids = bound_variables assumption in
+    (*let assumptions =
+      StringSet.fold
+        (fun id m -> m |> StringMap.add id (formulae_of_id id assumption))
+        assumption_ids
+        StringMap.empty
+    in*)
+    let env =
+      StringSet.fold
+        (fun id m -> m |> StringMap.add id (Formula(formulae_of_id id assumption)))
+        assumption_ids
+        env
+    in
+
+
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) ->
@@ -430,10 +469,10 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         then
           let k = (fun (res: value) (h: heap) ->
               k_check_inv res h;
-              symexec expr env sdef Unit h k assumption
+              symexec expr env sdef Unit h k
             )
           in
-            symexec body env sdef Unit h k assumption
+            symexec body env sdef Unit h k
         else
           k_cond_false res h
         )
@@ -462,10 +501,11 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
     let k = (fun (res: value) (_h: heap) ->
         r := res
       ) in
-      symexec loc env sdef Unit h k [];
+      symexec loc env sdef Unit h k;
       (match !r with
       | InvalidatedLoc(_) -> raise (SymbolicExecutionException "Separation violated due to invalidated location!")
       | Loc(l, _) -> IntSet.empty |> IntSet.add l
+      | Formula(_) -> raise (SymbolicExecutionException "Separation violated due to abstracted location!")
       | _ -> raise (SymbolicExecutionException "check_separation expected location!")
       )
 | _ -> raise (SymbolicExecutionException "check_separation does not support this AST node!")
@@ -476,4 +516,4 @@ let verify (expr: expression) =
   let res = Unit in
   let h = IntMap.empty in
   let k = (fun (_res: value) (_h: heap) -> ()) in
-    symexec expr env sdef res h k []
+    symexec expr env sdef res h k
