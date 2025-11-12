@@ -1,8 +1,14 @@
 open Appendix_c_verifier.Parse
 open Appendix_c_verifier.Symexec
+open Appendix_c_verifier.Preproc
+open Appendix_c_verifier.Analysis
+open Appendix_c_verifier.Common
 
 let vf (src: string): bool =
   let prog = parse src in
+  let prog = ssa prog "" "" in
+  let (_, tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty Unit in
+    type_map := tm;
     try (let _ = verify prog in true) with
     | _ -> false
 
