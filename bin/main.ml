@@ -53,9 +53,10 @@ let () = if String.equal "" !input_file then
         print_newline ()));
       (if not !no_type_check then
       (*try*)
-        let (tc_res, _tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty Unit in
+        let (tc_res, tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty Unit in
           print_endline ("Type: " ^ types_to_string tc_res);
-          print_newline ()
+          print_newline ();
+          type_map := tm;
       (*with TypeCheckError(e) -> print_string "TypeCheckError: "; print_endline e*));
       (if not !no_interpret then
         (print_endline "Result:";

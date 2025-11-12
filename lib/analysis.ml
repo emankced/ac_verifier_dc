@@ -21,6 +21,8 @@ type ast_types = (types IntMap.t)
 (** Exception used by the type checker *)
 exception TypeCheckError of string
 
+let type_map: ast_types ref = ref IntMap.empty
+
 let types_to_string (t: types) : string = match t with
 | Null -> "Null"
 | Loc(id) -> "Loc(" ^ id ^ ")"
@@ -181,15 +183,15 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         raise (TypeCheckError ("For:" ^ string_of_int i ^ " requires a number as start parameter!"))
 | Assert(i, assertion) ->
     let env = env |> StringMap.add "result" res in
-    let (t_assertion, _) = type_check assertion env sdef tm Unit in
+    let (t_assertion, tm) = type_check assertion env sdef tm Unit in
       (match t_assertion with
       | Bool -> ()
       | _ -> raise (TypeCheckError ("Assert:" ^ string_of_int i ^ " requires a bool expression as assertion!"))
       );
-      (res, tm)
+      (res, tm |> IntMap.add i Unit)
 | Invariant(i, inv, body) ->
     let env = env |> StringMap.add "result" res in (*TODO: should the invariant have access to result?*)
-    let (t_assertion, _) = type_check inv env sdef tm Unit in
+    let (t_assertion, tm) = type_check inv env sdef tm Unit in
       (match t_assertion with
       | Bool -> ()
       | _ -> raise (TypeCheckError ("Assert:" ^ string_of_int i ^ " requires a bool expression as assertion!"))
