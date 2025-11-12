@@ -279,7 +279,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let assert_env = if res == Unit then env else env |> StringMap.add "result" res in
     let premise = get_premise assert_env sdef h in
     let assertion = derive assertion sdef h in
-    let formula = Z3.Boolean.mk_implies ctx premise assertion in
+    let formula = Z3.Boolean.mk_and ctx [premise; assertion] in
       solve [formula];
       k res h
 | Seq(_i, expr0, expr1) ->
@@ -292,11 +292,11 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let k = (fun (_res: value) (h: heap) ->
       let cond = derive cond sdef h in
       let premise = get_premise env sdef h in
-      let formula = Z3.Boolean.mk_implies ctx premise cond in
-        (*TODO abstract with cond*)
+      let formula = Z3.Boolean.mk_and ctx [premise; cond] in
         if (try solve [formula]; true with
             | Unsatisfiable -> symexec else_body env sdef Unit h k; false
             | Unknown ->
+                (*TODO abstract with cond*)
                 raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
             )
         then
