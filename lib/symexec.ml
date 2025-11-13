@@ -289,21 +289,37 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec expr0 env sdef res h k
 | Cond(_i, cond, then_body, else_body) ->
-    let k = (fun (_res: value) (h: heap) ->
-      let cond = derive cond sdef h in
-      let premise = get_premise env sdef h in
-      let formula = Z3.Boolean.mk_and ctx [premise; cond] in
-        if (try solve [formula]; true with
-            | Unsatisfiable -> symexec else_body env sdef Unit h k; false
-            | Unknown ->
-                (*TODO abstract with cond*)
-                raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
-            )
-        then
-          symexec then_body env sdef Unit h k
+    (*let k = (fun (_res: value) (h: heap) ->*)
+    let cond = derive cond sdef h in
+    let premise = get_premise env sdef h in
+
+    let pos =
+      (try solve [premise; cond]; true with
+      | Unsatisfiable -> false
+      | Unknown ->
+          (*TODO abstract with cond*)
+          raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
       )
     in
-      symexec cond env sdef res h k
+    let neg =
+      (try solve [premise; Z3.Boolean.mk_not ctx cond]; true with
+      | Unsatisfiable -> false
+      | Unknown ->
+          (*TODO abstract with cond*)
+          raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
+      )
+    in
+      (match pos, neg with
+      | true, false -> symexec then_body env sdef Unit h k
+      | false, true -> symexec else_body env sdef Unit h k
+      | true, true ->
+          (*TODO abstract with cond*)
+          raise (SymbolicExecutionException "TODO: Cond is satisfiable for both cases")
+      | false, false ->
+          (*TODO abstract with cond*)
+          raise (SymbolicExecutionException "TODO: Cond is satisfiable for no case")
+      )
+
 | Struct(_i, id, fields, body) ->
     if List.length fields == 0 then
       raise (SymbolicExecutionException "Field list cannot be empty for struct construction!")
