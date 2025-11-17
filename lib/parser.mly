@@ -95,9 +95,10 @@ type_list:
 ;
 
 type_:
-| INT { Num }
-| BOOL { Bool }
-| id = ID { LocStruct(id) }
+| INT { NumT }
+| BOOL { BoolT }
+(* don't allow memory referencing on the heap *)
+(*| id = ID { LocStruct(id) }*)
 ;
 
 command:

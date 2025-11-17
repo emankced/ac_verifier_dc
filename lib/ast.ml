@@ -18,9 +18,9 @@ type binop =
 
 (** Types used creating a struct *)
 type struct_type =
-| Num
-| Bool
-| LocStruct of string
+| NumT
+| BoolT
+(*| LocStruct of string*)
 
 (** ID type used to uniquely identify AST nodes *)
 type ast_id = int
@@ -49,9 +49,9 @@ type expression =
 (* recursive let *)
 
 let string_of_struct_type (t: struct_type) : string = match t with
-| Num -> "Num"
-| Bool -> "Bool"
-| LocStruct(id) -> "LocStruct(" ^ id ^ ")"
+| NumT -> "Num"
+| BoolT -> "Bool"
+(*| LocStruct(id) -> "LocStruct(" ^ id ^ ")"*)
 
 let rec string_of_expression (expr: expression) : string = match expr with
 | Num(i, n) -> "Num:" ^ string_of_int i ^ "(" ^ string_of_int n ^ ")"

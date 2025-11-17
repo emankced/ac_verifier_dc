@@ -97,9 +97,9 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       raise (TypeCheckError ("Struct:" ^ string_of_int i ^ " name is already taken!"))
     else
       let sdef = sdef |> StringMap.add id (List.map (fun ((tid, t): string * struct_type) -> (tid, match t with
-        | Num -> Num
-        | Bool -> Bool
-        | LocStruct(name) -> if String.equal id name || StringMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")
+        | NumT -> Num
+        | BoolT -> Bool
+        (*| LocStruct(name) -> if String.equal id name || StringMap.exists (fun k _ -> String.equal k name) sdef then Loc(name) else raise (TypeCheckError "Struct type does not exists!")*)
         )) types) in
       let (t, tm) = type_check body env sdef tm res in
         (t, tm |> IntMap.add i t)

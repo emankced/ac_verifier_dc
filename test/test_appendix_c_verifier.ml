@@ -22,14 +22,14 @@ let%test "Conditional test" =
       | _ -> false
 
 let%test "Simple heap access test" =
-  let prog = Struct(0, "nums", [("a", Num); ("b", Num)], Let(1, "x", Malloc(2, "nums", [Num(3, -6); Num(4, 5)]), BinOp(5, Add, Mget(6, Id(7, "x"), "a"), Mget(8, Id(9, "x"), "b")))) in
+  let prog = Struct(0, "nums", [("a", NumT); ("b", NumT)], Let(1, "x", Malloc(2, "nums", [Num(3, -6); Num(4, 5)]), BinOp(5, Add, Mget(6, Id(7, "x"), "a"), Mget(8, Id(9, "x"), "b")))) in
     let (res, _) = interp prog env sdef Unit h in
       match res with
       | Num(-1) -> true
       | _ -> false
 
 let%test "Invalid heap access test" =
-  let prog = Struct(0, "num", [("n", Num)], Let(1, "x", Malloc(2, "num", [Num(3, 3)]), Mget(4, Id(5, "x"), "m"))) in
+  let prog = Struct(0, "num", [("n", NumT)], Let(1, "x", Malloc(2, "num", [Num(3, 3)]), Mget(4, Id(5, "x"), "m"))) in
     try
       ignore (interp prog env sdef Unit h);
       false
@@ -38,14 +38,14 @@ let%test "Invalid heap access test" =
       | _ -> false
 
 let%test "While loop" =
-  let prog = Struct(0, "num", [("n", Num)], Let(1, "c", Malloc(2, "num", [Num(3, 0)]), While(4, BinOp(5, Lt, Mget(6, Id(7, "c"), "n"), Num(8, 5)), Mset(9, Id(10, "c"), "n", BinOp(11, Add, Mget(12, Id(13, "c"), "n"), Num(14, 1)))))) in
+  let prog = Struct(0, "num", [("n", NumT)], Let(1, "c", Malloc(2, "num", [Num(3, 0)]), While(4, BinOp(5, Lt, Mget(6, Id(7, "c"), "n"), Num(8, 5)), Mset(9, Id(10, "c"), "n", BinOp(11, Add, Mget(12, Id(13, "c"), "n"), Num(14, 1)))))) in
     let (_, h) = interp prog env sdef Unit h in
       match IntMap.find_first (fun _ -> true) h with
       | (_, [Num(5)]) -> true
       | _ -> false
 
 let%test "For loop" =
-  let prog = Struct(0, "num", [("n", Num)], Let(1, "sum", Malloc(2, "num", [Num(3, 0)]), For(4, "i", Num(5, 1), Num(6, 5), Mset(7, Id(8, "sum"), "n", BinOp(9, Add, Mget(10, Id(11, "sum"), "n"), Id(12, "i")))))) in
+  let prog = Struct(0, "num", [("n", NumT)], Let(1, "sum", Malloc(2, "num", [Num(3, 0)]), For(4, "i", Num(5, 1), Num(6, 5), Mset(7, Id(8, "sum"), "n", BinOp(9, Add, Mget(10, Id(11, "sum"), "n"), Id(12, "i")))))) in
     let (_, h) = interp prog env sdef Unit h in
       match IntMap.find_first (fun _ -> true) h with
       | (_, [Num(15)]) -> true
