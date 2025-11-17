@@ -106,7 +106,7 @@ command:
 | LET; id = ID; ASSIGN; value = command; IN; body = command { Let(get i, id, value, body) }
 | IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(get i, cond, then_body, else_body) }
 | IF; cond = expr; THEN; then_body = command { Cond(get i, cond, then_body, Unit(get i)) }
-| DEREF; loc = term; DOT; field = ID; ASSIGN; e = expr { Mset(get i, loc, field, e) }
+| DEREF; id = ID; DOT; field = ID; ASSIGN; e = expr { Mset(get i, Id(get i, id), field, e) }
 | MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(get i, id, l) }
 | MFREE; LPARAN; e = expr; RPARAN { Mfree(get i, e) }
 | ASSERT; INVARIANT; inv = assrt; ASSERT; WHILE; cond = expr; DO; body = command { Invariant(get i, inv, While(get i, cond, body)) }
@@ -150,7 +150,7 @@ term:
 | LPARAN; e = expr; RPARAN { e }
 | SUB; LPARAN; e = expr; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
 | NOT; LPARAN; e = expr; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
-| DEREF; loc = term; DOT; field = ID { Mget(get i, loc, field) }
+| DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
 | SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
 | NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
 | id = ID; { Id(get i, id) }
@@ -192,7 +192,7 @@ term_with_result:
 | LPARAN; e = expr_with_result; RPARAN { e }
 | SUB; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
 | NOT; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
-| DEREF; loc = term; DOT; field = ID { Mget(get i, loc, field) }
+| DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
 | SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
 | NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
 | RESULT {Id(get i, "result")}
