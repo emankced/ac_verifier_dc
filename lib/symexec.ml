@@ -154,47 +154,6 @@ let formulae_of_deref (id: string) (code: expression) : expression list = match 
   )
 | x -> [x]
 
-let get_premise (env: environment) (_sdef: struct_definitions) (h: heap) : Z3.Expr.expr =
-  let env_list = StringMap.fold
-    (fun id v l ->
-      let v, sort = match v with
-      | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
-      | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
-      | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort
-      | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
-      in
-        let sym = string_symbol id in
-        let c = Z3.Expr.mk_const ctx sym sort in
-        let eq = Z3.Boolean.mk_eq ctx c v in
-          eq :: l
-    )
-    env
-    []
-  in
-  let h_list = IntMap.fold
-    (fun loc vs l ->
-      let vs = List.mapi (fun i v -> i, v) vs in
-      List.fold_right
-        (fun (i, v) l ->
-          let v, sort = match v with
-          | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
-          | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
-          | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
-          in
-            let sym = int_symbol (loc+i) in
-            let c = Z3.Expr.mk_const ctx sym sort in
-            let eq = Z3.Boolean.mk_eq ctx c v in
-              eq :: l
-        )
-        vs
-        l
-    )
-    h
-    []
-  in
-    Z3.Boolean.mk_and ctx (List.append env_list h_list)
-  (*TODO bring heap locations to the premise*)
-
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match expr with
 | Num(_i, n) ->
     Z3.Arithmetic.Integer.mk_numeral_i ctx n
@@ -414,9 +373,13 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         assumption_ids
         StringMap.empty
     in*)
+    (*TODO maybe only abstract values on the heap as formula*)
     let env =
       StringSet.fold
-        (fun id m -> m |> StringMap.add id (Formula(formulae_of_id id assumption)))
+        (fun id m ->
+          match env |> StringMap.find id with
+          | Loc(_l, _name) -> m
+          | _ -> m |> StringMap.add id (Formula(formulae_of_id id assumption)))
         assumption_ids
         env
     in
@@ -425,7 +388,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) ->
-      let inv_env = env |> StringMap.add "result" res in
+      let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
       let premise = get_premise inv_env sdef h in
       let inv = derive inv env sdef h in
         solve [premise; inv]
@@ -434,7 +397,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       (* k for cond=false and invariant*)
       let k_cond_false = (fun (res: value) (h: heap) ->
         let cond_form = derive cond env sdef h in
-        let inv_env = env |> StringMap.add "result" res in
+        let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
         let premise = get_premise inv_env sdef h in
         let inv = derive inv env sdef h in
         let formula = Z3.Boolean.mk_implies
@@ -466,7 +429,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         (* k for cond=true and invariant*)
         let k_cond_true = (fun (res: value) (h: heap) ->
         let cond = derive cond env sdef h in
-        let inv_env = env |> StringMap.add "result" res in
+        let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
         let premise = get_premise inv_env sdef h in
         let inv = derive inv env sdef h in
         let formula = Z3.Boolean.mk_implies
@@ -520,6 +483,48 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
       | _ -> raise (SymbolicExecutionException "check_separation expected location!")
       )
 | _ -> raise (SymbolicExecutionException "check_separation does not support this AST node!")
+
+and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr =
+  let env_list = StringMap.fold
+    (fun id v l ->
+      let v, sort = match v with
+      | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
+      | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
+      | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort
+      | Formula(exprs) -> Z3.Boolean.mk_and ctx (List.map (fun e -> derive e env sdef h) exprs), bool_sort
+      | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
+      in
+        let sym = string_symbol id in
+        let c = Z3.Expr.mk_const ctx sym sort in
+        let eq = Z3.Boolean.mk_eq ctx c v in
+          eq :: l
+    )
+    env
+    []
+  in
+  let h_list = IntMap.fold
+    (fun loc vs l ->
+      let vs = List.mapi (fun i v -> i, v) vs in
+      List.fold_right
+        (fun (i, v) l ->
+          let v, sort = match v with
+          | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
+          | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
+          | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
+          in
+            let sym = int_symbol (loc+i) in
+            let c = Z3.Expr.mk_const ctx sym sort in
+            let eq = Z3.Boolean.mk_eq ctx c v in
+              eq :: l
+        )
+        vs
+        l
+    )
+    h
+    []
+  in
+    Z3.Boolean.mk_and ctx (List.append env_list h_list)
+  (*TODO bring heap locations to the premise*)
 
 let verify (expr: expression) =
   let env = StringMap.empty in
