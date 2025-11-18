@@ -89,6 +89,7 @@ let rec replace_nth (l: value list) (v: value) (n: int) : value list =
         | (Loc(_), Loc(_)) -> v :: xs
         | (Bool(_), Bool(_)) -> v :: xs (* should unit even be allowed on heap? it doesn't hold a value and data types cannot be changed afeterwards... *)
         | (Unit, Unit) -> v :: xs
+        | (_, Formula(_)) -> v :: xs (* always allow a formula *)
         | _ -> raise (SymbolicExecutionException "mset cannot change data type of field!")
         )
       else
@@ -125,34 +126,6 @@ let invalidate (h: heap): heap =
         vl
     )
     h
-
-let rec formulae_of_id (id: string) (code: expression) : expression list = match code with
-| BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
-  (match
-    let cmp = (fun s -> String.equal id s) in
-      bound_variables lhs |> StringSet.exists cmp,
-      bound_variables rhs |> StringSet.exists cmp
-  with
-  | true, true -> List.append (formulae_of_id id lhs) (formulae_of_id id rhs)
-  | true, false -> formulae_of_id id lhs
-  | false, true -> formulae_of_id id rhs
-  | false, false -> []
-  )
-| x -> [x]
-
-let formulae_of_deref (id: string) (code: expression) : expression list = match code with
-| BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
-  (match
-    let cmp = (fun s -> String.equal id s) in
-      bound_variables lhs |> StringSet.exists cmp,
-      bound_variables rhs |> StringSet.exists cmp
-  with
-  | true, true -> List.append (formulae_of_id id lhs) (formulae_of_id id rhs)
-  | true, false -> formulae_of_id id lhs
-  | false, true -> formulae_of_id id rhs
-  | false, false -> []
-  )
-| x -> [x]
 
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match expr with
 | Num(_i, n) ->
@@ -249,6 +222,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
             | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
             | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
+            (*TODO handle formulae*)
             )
           in
             k res_binop h
@@ -365,7 +339,84 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec loc env sdef Unit h k
 | Invariant(_, inv, While(_, cond, body)) ->
-    let assumption = BinOp(-1, And, inv, cond) in
+    let rec find_derefs (expr: expression) : (string * StringSet.t) IntMap.t =
+      (match expr with
+      | BinOp(_, _op, lhs, rhs) -> IntMap.union (fun _l (t, lhs) (_t, rhs) -> Some(t, StringSet.union lhs rhs)) (find_derefs lhs) (find_derefs rhs)
+      | Mget(_, loc, field) ->
+          let r = ref Unit in
+          let k =
+            (fun res _h ->
+              r := res
+            )
+          in
+            symexec loc env sdef Unit h k;
+            (match !r with
+            | Loc(addr, struct_name) ->
+                IntMap.empty |> IntMap.add addr (struct_name, StringSet.empty |> StringSet.add field)
+            | _ -> raise (SymbolicExecutionException "find_derefs requires location!")
+            )
+      | _ -> IntMap.empty
+      )
+    in
+
+    let rec contains_deref (code: expression) (addr: int) (field: string) : bool =
+      (match code with
+      | Mget(_, loc, field_) ->
+          if not (String.equal field field_) then
+            false
+          else
+            let r = ref Unit in
+            let k =
+              (fun res _h ->
+                r := res
+              )
+            in
+              symexec loc env sdef Unit h k;
+              (match !r with
+              | Loc(addr_, _struct_name) ->
+                  addr == addr_
+              | _ -> raise (SymbolicExecutionException "find_derefs requires location!")
+              )
+      | BinOp(_, _op, lhs, rhs) -> (contains_deref lhs addr field) || (contains_deref rhs addr field)
+      | _ -> false
+      )
+    in
+
+    let rec formulae_of_deref (code: expression) (addr: int) (struct_name: string) (field: string) : expression list =
+      (match code with
+      | BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
+        (match
+          contains_deref lhs addr field,
+          contains_deref rhs addr field
+        with
+        | true, true -> List.append (formulae_of_deref lhs addr struct_name field) (formulae_of_deref rhs addr struct_name field)
+        | true, false -> formulae_of_deref lhs addr struct_name field
+        | false, true -> formulae_of_deref rhs addr struct_name field
+        | false, false -> []
+        )
+      | x -> [x]
+      )
+    in
+
+    let assumption = (BinOp(-1, And, inv, cond)) in
+    let derefs_map = find_derefs assumption in
+    let h =
+      IntMap.fold
+        (fun addr (struct_name, fields) h ->
+          StringSet.fold
+            (fun field h ->
+              let formulae = formulae_of_deref assumption addr struct_name field in
+              let h = mset addr field struct_name (Formula(formulae)) h sdef in
+                h
+            )
+            fields
+            h
+        )
+        derefs_map
+        h
+    in
+
+    (*let assumption = BinOp(-1, And, inv, cond) in
     let assumption_ids = bound_variables assumption in
     (*let assumptions =
       StringSet.fold
@@ -374,16 +425,29 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         StringMap.empty
     in*)
     (*TODO maybe only abstract values on the heap as formula*)
-    let env =
+    let env, assumption_locs =
       StringSet.fold
-        (fun id m ->
+        (fun id (m, assumption_locs) ->
           match env |> StringMap.find id with
-          | Loc(_l, _name) -> m
-          | _ -> m |> StringMap.add id (Formula(formulae_of_id id assumption)))
+          | Loc(l, field) -> m, (l, field, Formula(formulae_of_id id assumption)) :: assumption_locs
+          | _ -> m |> StringMap.add id (Formula(formulae_of_id id assumption)), assumption_locs)
         assumption_ids
-        env
+        (env, [])
     in
 
+    let h =
+      List.fold_right
+        (fun (loc, _field, form) h ->
+          let offset = 0 in
+          h |> IntMap.add loc (
+            List.mapi
+              (fun i v -> if i == offset then form else v)
+              (IntMap.find loc h)
+          )
+        )
+        assumption_locs
+        h
+    in*)
 
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
@@ -510,6 +574,15 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
           let v, sort = match v with
           | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
           | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
+          | Formula(exprs) ->
+              let exprs =
+                List.map
+                  (fun e ->
+                    derive e env sdef h
+                  )
+                  exprs
+              in
+                Z3.Boolean.mk_and ctx exprs, bool_sort
           | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
           in
             let sym = int_symbol (loc+i) in
