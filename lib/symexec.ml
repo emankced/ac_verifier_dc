@@ -430,10 +430,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       )
     in
 
-    let assumption: expression = (BinOp(-1, And, inv, cond)) in
-    let derefs_map = find_derefs assumption in
-    let h =
-      IntMap.fold
+    let update_h h assumption derefs_map : heap = IntMap.fold
         (fun addr (struct_name, fields) h ->
           StringSet.fold
             (fun field h ->
@@ -449,9 +446,13 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             fields
             h
         )
-        derefs_map
-        h
+      derefs_map
+      h
     in
+
+    (*let assumption: expression = (BinOp(-1, And, inv, cond)) in
+    let derefs_map = find_derefs assumption in
+    let h = update_h h assumption derefs_map in*)
 
     (*let assumption = BinOp(-1, And, inv, cond) in
     let assumption_ids = bound_variables assumption in
@@ -492,38 +493,42 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
       let premise = get_premise inv_env sdef h in
       let inv = derive inv env sdef h in
-        solve [premise; inv]
+        solve [premise; inv];
       )
     in
       (* k for cond=false and invariant*)
       let k_cond_false = (fun (res: value) (h: heap) ->
-        let cond_form = Z3.Boolean.mk_not ctx (derive cond env sdef h) in
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
+
+        let assumption: expression = BinOp(-1, And, inv, BinOp(-2, Eq, cond, Bool(-3, false))) in
+        let derefs_map = find_derefs assumption in
+        let h = update_h h assumption derefs_map in
+
         let premise = get_premise inv_env sdef h in
         let inv = derive inv env sdef h in
-        let formula = Z3.Boolean.mk_implies
-          ctx
-          (Z3.Boolean.mk_and ctx [premise; inv])
-          (Z3.Boolean.mk_not ctx cond_form)
-        in
-          solve [formula];
+          solve [premise; inv];
           k res h
         )
       in
 
       (* k for cond=true and invariant*)
       let k_cond_true = (fun (res: value) (h: heap) ->
-        let cond = derive cond env sdef h in
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
+
+        let assumption: expression = BinOp(-1, And, inv, cond) in
+        let derefs_map = find_derefs assumption in
+        let h = update_h h assumption derefs_map in
+
         let premise = get_premise inv_env sdef h in
         let inv = derive inv env sdef h in
-        let formula = Z3.Boolean.mk_implies
-          ctx
-          (Z3.Boolean.mk_and ctx [premise; inv])
-          cond
-        in
-          solve [formula];
-          symexec body env sdef Unit h k_check_inv
+          solve [premise; inv];
+          let k =
+            (fun res h ->
+              k_check_inv res h;
+              k res h
+            )
+          in
+            symexec body env sdef Unit h k
         )
       in
         k_check_inv res h;
