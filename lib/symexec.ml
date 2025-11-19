@@ -22,6 +22,12 @@ let solve formula = match Z3.Solver.check solver formula with
 | UNSATISFIABLE -> raise Unsatisfiable
 | UNKNOWN -> raise Unknown (* should unknown raise an exception? *)
 
+type formula =
+| Num of int
+| Bool of bool
+| Id of string
+| Mget of int * string * string
+| BinOp of binop * formula * formula
 
 (** Interpretation values used in the symbolic execution *)
 type value =
@@ -31,7 +37,7 @@ type value =
 | InvalidatedNum
 | InvalidatedBool
 | InvalidatedLoc of string
-| Formula of expression list
+| Formula of formula
 | Unit
 
 (** Map that holds the environment store *)
@@ -112,20 +118,43 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
     )
 
-let invalidate (h: heap): heap =
-  IntMap.map
-    (fun vl ->
-      List.map
-        (fun v ->
-          match v with
-          | Num(_) -> InvalidatedNum
-          | Bool(_) -> InvalidatedBool
-          | Loc(_, id) -> InvalidatedLoc(id)
-          | v -> v
-        )
-        vl
+let value_to_formula (value: value) (_env: environment) (_sdef: struct_definitions) (_h: heap) : formula = match value with
+| Num(n) -> Num(n)
+| Bool(b) -> Bool(b)
+| Formula(form) -> form
+| _ -> raise (SymbolicExecutionException "value_to_formula does not support all values")
+
+let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match formula with
+| Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n
+| Bool(b) -> if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx
+| Id(id) ->
+    let sym = string_symbol id in
+      Z3.Arithmetic.Integer.mk_const ctx sym (*TODO also support bool type*)
+| Mget(loc, field, struct_name) ->
+    let struct_info = sdef |> StringMap.find struct_name in
+    (match List.find_index (fun (name, _) -> String.equal name field) struct_info with
+    | Some(offset) ->
+        let sym = int_symbol (loc+offset) in
+          Z3.Arithmetic.Integer.mk_const ctx sym (*TODO also support bool type*)
+    | None -> raise (SymbolicExecutionException "formula_to_Z3 could not find the field")
     )
-    h
+| BinOp(op, lhs, rhs) ->
+  let lhs, rhs = (formula_to_Z3 lhs env sdef h), (formula_to_Z3 rhs env sdef h) in
+  (match op with
+  | Add -> Z3.Arithmetic.mk_add ctx [lhs; rhs]
+  | Sub -> Z3.Arithmetic.mk_sub ctx [lhs; rhs]
+  | Mul -> Z3.Arithmetic.mk_mul ctx [lhs; rhs]
+  | Div -> Z3.Arithmetic.mk_div ctx lhs rhs
+  | Le -> Z3.Arithmetic.mk_le ctx lhs rhs
+  | Lt -> Z3.Arithmetic.mk_lt ctx lhs rhs
+  | Ge -> Z3.Arithmetic.mk_ge ctx lhs rhs
+  | Gt -> Z3.Arithmetic.mk_gt ctx lhs rhs
+  | Eq -> Z3.Boolean.mk_eq ctx lhs rhs
+  | Ne -> Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs rhs)
+  | And | Sep -> Z3.Boolean.mk_and ctx [lhs; rhs]
+  | Or -> Z3.Boolean.mk_or ctx [lhs; rhs]
+  | _ -> raise (SymbolicExecutionException "formula_to_Z3 does not support all binops")
+  )
 
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match expr with
 | Num(_i, n) ->
@@ -221,6 +250,9 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
             | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
             | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
+            | (op, Formula(lhs), Formula(rhs)) -> Formula(BinOp(op, lhs, rhs))
+            | (op, Formula(form), rhs) -> Formula(BinOp(op, form, value_to_formula rhs env sdef h))
+            | (op, lhs, Formula(form)) -> Formula(BinOp(op, value_to_formula lhs env sdef h, form))
             | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
             (*TODO handle formulae*)
             )
@@ -382,7 +414,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       )
     in
 
-    let rec formulae_of_deref (code: expression) (addr: int) (struct_name: string) (field: string) : expression list =
+    let rec formulae_of_deref (code: expression) (addr: int) (struct_name: string) (field: string) : formula list =
       (match code with
       | BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
         (match
@@ -394,11 +426,11 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         | false, true -> formulae_of_deref rhs addr struct_name field
         | false, false -> []
         )
-      | x -> [x]
+      | x -> [formula_of x env sdef h]
       )
     in
 
-    let assumption = (BinOp(-1, And, inv, cond)) in
+    let assumption: expression = (BinOp(-1, And, inv, cond)) in
     let derefs_map = find_derefs assumption in
     let h =
       IntMap.fold
@@ -406,7 +438,12 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           StringSet.fold
             (fun field h ->
               let formulae = formulae_of_deref assumption addr struct_name field in
-              let h = mset addr field struct_name (Formula(formulae)) h sdef in
+              let form =
+                match formulae with
+                | x :: xs -> List.fold_right (fun a b -> BinOp(And, a, b)) xs x
+                | _ -> raise (SymbolicExecutionException "symexec: formula list needs at least one element!")
+              in
+              let h = mset addr field struct_name (Formula(form)) h sdef in
                 h
             )
             fields
@@ -555,7 +592,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
       | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
       | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
       | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort
-      | Formula(exprs) -> Z3.Boolean.mk_and ctx (List.map (fun e -> derive e env sdef h) exprs), bool_sort
+      | Formula(_form) -> raise (SymbolicExecutionException "get_premise TODO") (*formula_to_Z3 form env sdef h, bool_sort*)
       | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
       in
         let sym = string_symbol id in
@@ -574,15 +611,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
           let v, sort = match v with
           | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
           | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
-          | Formula(exprs) ->
-              let exprs =
-                List.map
-                  (fun e ->
-                    derive e env sdef h
-                  )
-                  exprs
-              in
-                Z3.Boolean.mk_and ctx exprs, bool_sort
+          | Formula(form) -> formula_to_Z3 form env sdef h, bool_sort
           | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
           in
             let sym = int_symbol (loc+i) in
@@ -598,6 +627,21 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
   in
     Z3.Boolean.mk_and ctx (List.append env_list h_list)
   (*TODO bring heap locations to the premise*)
+
+and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : formula  = match expr with
+| Num(_, n) -> Num(n)
+| Bool(_, b) -> Bool(b)
+| BinOp(_, op, lhs, rhs) -> BinOp(op, formula_of lhs env sdef h, formula_of rhs env sdef h)
+| Mget(_, loc, field) ->
+    let r = ref Unit in
+    let k = (fun res _h -> r := res) in
+      symexec loc env sdef Unit h k;
+      (match !r with
+      | Loc(addr, struct_name) -> Mget(addr, field, struct_name)
+      | _ -> raise (SymbolicExecutionException "formula_of needs a location for Mget!")
+      )
+| Id(_, id) -> Id(id)
+| _ -> raise (SymbolicExecutionException "formula_of does not support all AST nodes")
 
 let verify (expr: expression) =
   let env = StringMap.empty in
