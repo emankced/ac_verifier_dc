@@ -497,7 +497,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       (* k for cond=false and invariant*)
       let k_cond_false = (fun (res: value) (h: heap) ->
-        let cond_form = derive cond env sdef h in
+        let cond_form = Z3.Boolean.mk_not ctx (derive cond env sdef h) in
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
         let premise = get_premise inv_env sdef h in
         let inv = derive inv env sdef h in
@@ -506,29 +506,13 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           (Z3.Boolean.mk_and ctx [premise; inv])
           (Z3.Boolean.mk_not ctx cond_form)
         in
-        if try solve [formula]; true with
-        | _ -> false
-        then
+          solve [formula];
           k res h
-        else
-          raise (SymbolicExecutionException "symexec cannot prove loop will terminate at some point TODO")
-          (*
-          (*invalidate heap and retry*)
-          let h = invalidate h in
-          let (cond_form, cond_sym, cond_sort) = derive cond env sdef h in
-          let cond_c = Z3.Expr.mk_const ctx cond_sym cond_sort in
-            if try solve [cond_form; Z3.Boolean.mk_not ctx cond_c; inv; inv_c]; true with
-            | Unknown -> true
-            | Unsatisfiable -> false
-            then
-              k res h
-            else
-              raise (SymbolicExecutionException "symexec cannot prove loop will terminate at some point TODO")
-            *)
         )
       in
-        (* k for cond=true and invariant*)
-        let k_cond_true = (fun (res: value) (h: heap) ->
+
+      (* k for cond=true and invariant*)
+      let k_cond_true = (fun (res: value) (h: heap) ->
         let cond = derive cond env sdef h in
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
         let premise = get_premise inv_env sdef h in
@@ -538,23 +522,13 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           (Z3.Boolean.mk_and ctx [premise; inv])
           cond
         in
-        if try solve [formula]; true with
-        | Unknown -> raise (SymbolicExecutionException "symexec cannot prove loop will terminate at some point")
-        | Unsatisfiable -> false
-        then
-          let k = (fun (res: value) (h: heap) ->
-              k_check_inv res h;
-              symexec expr env sdef Unit h k
-            )
-          in
-            symexec body env sdef Unit h k
-        else
-          k_cond_false res h
+          solve [formula];
+          symexec body env sdef Unit h k_check_inv
         )
-        in
-          k_check_inv res h;
-          k_cond_false res h;
-          k_cond_true res h
+      in
+        k_check_inv res h;
+        k_cond_false res h;
+        k_cond_true res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
 and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): IntSet.t = match a with
