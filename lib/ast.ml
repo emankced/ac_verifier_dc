@@ -22,29 +22,26 @@ type struct_type =
 | BoolT
 (*| LocStruct of string*)
 
-(** ID type used to uniquely identify AST nodes *)
-type ast_id = int
-
 (** Expressions as AST *)
 type expression =
-| Null of ast_id
-| Num of ast_id * int
-| Bool of ast_id * bool
-| Unit of ast_id
-| Let of ast_id * string * expression * expression
-| Struct of ast_id * string * ((string * struct_type) list) * expression
-| Id of ast_id * string
-| Cond of ast_id * expression * expression * expression
-| BinOp of ast_id * binop * expression * expression
-| Seq of ast_id * expression * expression
-| Malloc of ast_id * string * (expression list)
-| Mset of ast_id * expression * string * expression
-| Mget of ast_id * expression * string
-| Mfree of ast_id * expression
-| While of ast_id * expression * expression
-| For of ast_id * string * expression * expression * expression
-| Invariant of ast_id * expression * expression
-| Assert of ast_id * expression
+| Null of int
+| Num of int * int
+| Bool of int * bool
+| Unit of int
+| Let of int * string * expression * expression
+| Struct of int * string * ((string * struct_type) list) * expression
+| Id of int * string
+| Cond of int * expression * expression * expression
+| BinOp of int * binop * expression * expression
+| Seq of int * expression * expression
+| Malloc of int * string * (expression list)
+| Mset of int * expression * string * expression
+| Mget of int * expression * string
+| Mfree of int * expression
+| While of int * expression * expression
+| For of int * string * expression * expression * expression
+| Invariant of int * expression * expression
+| Assert of int * expression
 (* functions *)
 (* recursive let *)
 
@@ -94,8 +91,8 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Assert(i, assertion) -> "Assert:" ^ string_of_int i ^ "(" ^ string_of_expression assertion ^ ")"
 | Invariant(i, inv, loop) -> "Invariant:" ^ string_of_int i ^ "(" ^ string_of_expression inv ^ "," ^ string_of_expression loop ^ ")"
 
-(** returns the ast_id of an ast expression *)
-let get_ast_id (expr: expression) : ast_id = match expr with
+(** returns the int of an ast expression *)
+let get_ast_id (expr: expression) : int = match expr with
 | Null(i) -> i
 | Num(i, _) -> i
 | Bool(i, _) -> i
