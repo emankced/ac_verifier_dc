@@ -1,5 +1,5 @@
 open Ast
-open Analysis
+(*open Analysis*)
 open Common
 
 let ctx = Z3.mk_context [("proof", "true")]
@@ -34,9 +34,6 @@ type value =
 | Num of int
 | Bool of bool
 | Loc of int * string
-| InvalidatedNum
-| InvalidatedBool
-| InvalidatedLoc of string
 | Formula of formula
 | Unit
 
@@ -47,17 +44,18 @@ type environment = (value StringMap.t)
 type struct_definitions = ((string * struct_type) list StringMap.t)
 
 (** Map that holds the heap store *)
-type heap = ((value list) IntMap.t)
+type heap = (((value list) StringMap.t) IntMap.t)
 
 (** Memory allocation on the heap *)
-let malloc (init_values: value list) (h: heap) : int * heap =
-  if List.length init_values == 0 then
+let malloc (init_values: value StringMap.t) (h: heap) : int * heap =
+  if StringMap.cardinal init_values == 0 then
     raise (SymbolicExecutionException "malloc cannot allocate nothing")
   else
+    let init_values = init_values |> StringMap.map (fun v -> [v]) in
     let max_available_loc =
       IntMap.fold
-        (fun loc values_list previous_max ->
-          let size = List.length values_list in
+        (fun loc fields previous_max ->
+          let size = StringMap.cardinal fields in
             let loc = loc + size in
               if loc > previous_max then loc else previous_max)
         h
@@ -75,46 +73,26 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
   else
     let td = sdef |> StringMap.find type_id in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
-    | Some off ->
-    let values_list = IntMap.find loc h in
-      if off < 0 || off >= List.length values_list then
-        raise (SymbolicExecutionException ("mget got location out of range: " ^ string_of_int loc))
-      else
-        List.nth values_list off
+    | Some _ ->
+      let struct_data = IntMap.find loc h in
+      let field_history = StringMap.find field struct_data in
+        List.hd field_history
     | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
     )
-
-(** Replace nth element if the type matches *)
-let rec replace_nth (l: value list) (v: value) (n: int) : value list =
-  match l with
-  | [] -> []
-  | (x :: xs) ->
-      if n == 0 then
-        (match (x, v) with
-        | (Num(_), Num(_)) -> v :: xs
-        | (Loc(_), Loc(_)) -> v :: xs
-        | (Bool(_), Bool(_)) -> v :: xs (* should unit even be allowed on heap? it doesn't hold a value and data types cannot be changed afeterwards... *)
-        | (Unit, Unit) -> v :: xs
-        | (_, Formula(_)) -> v :: xs (* always allow a formula *)
-        | _ -> raise (SymbolicExecutionException "mset cannot change data type of field!")
-        )
-      else
-        x :: replace_nth xs v (n-1)
 
 (** Memory mutation on the heap *)
 let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) : heap =
   if IntMap.is_empty h then
     raise (SymbolicExecutionException "mset cannot set anything on an empty heap!")
   else
-    let values_list = IntMap.find loc h in
     let td = sdef |> StringMap.find type_id in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
-    | Some off ->
-      if off < 0 || off >= List.length values_list then
-        raise (SymbolicExecutionException ("mget got offset out of range: " ^ string_of_int loc))
-      else
-        let values_list = replace_nth values_list v off in
-          h |> IntMap.add loc values_list
+    | Some _ ->
+      let struct_data = h |> IntMap.find loc in
+      let field_history = struct_data |> StringMap.find field in
+      let field_history = v :: field_history in
+      let struct_data = struct_data |> StringMap.add field field_history in
+        h |> IntMap.add loc struct_data
     | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
     )
 
@@ -124,17 +102,28 @@ let value_to_formula (value: value) (_env: environment) (_sdef: struct_definitio
 | Formula(form) -> form
 | _ -> raise (SymbolicExecutionException "value_to_formula does not support all values")
 
+let sort_of_formula (_formula: formula) (_env: environment) (_sdef: struct_definitions) (_h: heap) : Z3.Sort.sort =
+  raise (SymbolicExecutionException "sort_of_formula TODO")
+
 let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match formula with
 | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n
-| Bool(b) -> if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx
+| Bool(b) -> Z3.Boolean.mk_val ctx b
 | Id(id) ->
+    let sort = (match env |> StringMap.find id with
+      | Num(_)
+      | Loc(_) -> int_sort
+      | Bool(_) -> bool_sort
+      | Formula(form) -> sort_of_formula form env sdef h
+      | Unit -> raise (SymbolicExecutionException "formula_to_Z3 cannot get sort of Unit...")
+      )
+    in
     let sym = string_symbol id in
-      Z3.Arithmetic.Integer.mk_const ctx sym (*TODO also support bool type*)
+      Z3.Expr.mk_const ctx sym sort
 | Mget(loc, field, struct_name) ->
     let struct_info = sdef |> StringMap.find struct_name in
     (match List.find_index (fun (name, _) -> String.equal name field) struct_info with
-    | Some(offset) ->
-        let sym = int_symbol (loc+offset) in
+    | Some(_offset) ->
+        let sym = string_symbol (string_of_int loc ^ "." ^ field) in
           Z3.Arithmetic.Integer.mk_const ctx sym (*TODO also support bool type*)
     | None -> raise (SymbolicExecutionException "formula_to_Z3 could not find the field")
     )
@@ -164,7 +153,7 @@ let rec insert_op_in_formula (op: binop) (formula: formula) (insert: formula) : 
 | BinOp(op_, lhs, rhs) -> BinOp(op_, lhs, insert_op_in_formula op rhs insert)
 | other -> BinOp(op, other, insert)
 
-let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match expr with
+let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = formula_to_Z3 (formula_of expr env sdef h) env sdef h (*match expr with
 | Num(_i, n) ->
     Z3.Arithmetic.Integer.mk_numeral_i ctx n
 | Bool(_i, b) ->
@@ -219,7 +208,7 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
             )
       | _ -> raise (SymbolicExecutionException "Derive Mget needs a location")
       )
-| _ -> raise (SymbolicExecutionException ("TODO: Derive does not support this AST node (yet?): " ^ string_of_expression expr))
+| _ -> raise (SymbolicExecutionException ("TODO: Derive does not support this AST node (yet?): " ^ string_of_expression expr))*)
 
 and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
@@ -276,7 +265,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let _ = check_separation assertion env sdef h in
     let assert_env = if res == Unit then env else env |> StringMap.add "result" res in
     let premise = get_premise assert_env sdef h in
-    let assertion = derive assertion env sdef h in
+    let assertion = derive assertion assert_env sdef h in
       solve [premise; assertion];
       k res h
 | Seq(_i, expr0, expr1) ->
@@ -327,10 +316,11 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         symexec body env sdef Unit h k
 | Malloc(_i, id, exprs) ->
     (*TODO check that the expression list matches the expected types *)
-    let _expected_types = sdef |> StringMap.find id in
+    let expected_types = sdef |> StringMap.find id in
+    let field_exprs = List.combine expected_types exprs in
     let (values_list, h) =
       List.fold_right
-        (fun expr (values_list, h) ->
+        (fun ((field, _), expr) (fields, h) ->
           let value = ref Unit in
           let value_h = ref h in
           let concat = (fun (res: value) (h: heap): unit ->
@@ -339,10 +329,10 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           )
           in
             symexec expr env sdef Unit h concat;
-            (!value :: values_list, !value_h)
+            (fields |> StringMap.add field !value, !value_h)
         )
-        exprs
-        ([], h)
+        field_exprs
+        (StringMap.empty, h)
       in
         let (loc, h) = malloc values_list h in
           k (Loc(loc, id)) h
@@ -457,49 +447,12 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       h
     in
 
-    (*let assumption: expression = (BinOp(-1, And, inv, cond)) in
-    let derefs_map = find_derefs assumption in
-    let h = update_h h assumption derefs_map in*)
-
-    (*let assumption = BinOp(-1, And, inv, cond) in
-    let assumption_ids = bound_variables assumption in
-    (*let assumptions =
-      StringSet.fold
-        (fun id m -> m |> StringMap.add id (formulae_of_id id assumption))
-        assumption_ids
-        StringMap.empty
-    in*)
-    (*TODO maybe only abstract values on the heap as formula*)
-    let env, assumption_locs =
-      StringSet.fold
-        (fun id (m, assumption_locs) ->
-          match env |> StringMap.find id with
-          | Loc(l, field) -> m, (l, field, Formula(formulae_of_id id assumption)) :: assumption_locs
-          | _ -> m |> StringMap.add id (Formula(formulae_of_id id assumption)), assumption_locs)
-        assumption_ids
-        (env, [])
-    in
-
-    let h =
-      List.fold_right
-        (fun (loc, _field, form) h ->
-          let offset = 0 in
-          h |> IntMap.add loc (
-            List.mapi
-              (fun i v -> if i == offset then form else v)
-              (IntMap.find loc h)
-          )
-        )
-        assumption_locs
-        h
-    in*)
-
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) ->
       let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
       let premise = get_premise inv_env sdef h in
-      let inv = derive inv env sdef h in
+      let inv = derive inv inv_env sdef h in
       let formula = Z3.Boolean.mk_implies ctx premise inv in
         solve [premise; formula];
       )
@@ -513,7 +466,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         let h = update_h h assumption derefs_map in
 
         let premise = get_premise inv_env sdef h in
-        let inv = derive inv env sdef h in
+        let inv = derive inv inv_env sdef h in
         let formula = Z3.Boolean.mk_implies ctx premise inv in
           solve [premise; formula];
           k res h
@@ -529,7 +482,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         let h = update_h h assumption derefs_map in
 
         let premise = get_premise inv_env sdef h in
-        let inv = derive inv env sdef h in
+        let inv = derive inv inv_env sdef h in
         let formula = Z3.Boolean.mk_implies ctx premise inv in
           solve [premise; formula];
           symexec body env sdef Unit h k_check_inv
@@ -561,7 +514,6 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
       ) in
       symexec loc env sdef Unit h k;
       (match !r with
-      | InvalidatedLoc(_) -> raise (SymbolicExecutionException "Separation violated due to invalidated location!")
       | Loc(l, _) -> IntSet.empty |> IntSet.add l
       | Formula(_) -> raise (SymbolicExecutionException "Separation violated due to abstracted location!")
       | _ -> raise (SymbolicExecutionException "check_separation expected location!")
@@ -587,25 +539,31 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
     []
   in
   let h_list = IntMap.fold
-    (fun loc vs l ->
-      let vs = List.mapi (fun i v -> i, v) vs in
-      List.fold_right
-        (fun (i, v) l ->
-          match v with
-          | Bool(b) ->
-              let sym = int_symbol (loc+i) in
-              let c = Z3.Expr.mk_const ctx sym bool_sort in
-              let eq = Z3.Boolean.mk_eq ctx c (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx) in
-                eq :: l
-          | Num(n) ->
-              let sym = int_symbol (loc+i) in
-              let c = Z3.Expr.mk_const ctx sym int_sort in
-              let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
-                eq :: l
-          | Formula(form) -> formula_to_Z3 form env sdef h :: l
-          | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
+    (fun loc fields l ->
+      StringMap.fold
+        (fun field field_history l ->
+          List.fold_right
+            (fun (i, v) l ->
+              match v with
+              | Bool(b) ->
+                  let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
+                  let sym = string_symbol id in
+                  let c = Z3.Expr.mk_const ctx sym bool_sort in
+                  let eq = Z3.Boolean.mk_eq ctx c (Z3.Boolean.mk_val ctx b) in
+                    eq :: l
+              | Num(n) ->
+                  let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
+                  let sym = string_symbol id in
+                  let c = Z3.Expr.mk_const ctx sym int_sort in
+                  let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
+                    eq :: l
+              | Formula(form) -> formula_to_Z3 form env sdef h :: l
+              | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
+            )
+            (List.mapi (fun i v -> i, v) field_history)
+            l
         )
-        vs
+        fields
         l
     )
     h
