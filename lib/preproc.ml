@@ -19,7 +19,6 @@ let rec ssa (expr: expression) (id_to_replace: string) (id_replacement: string):
         Let(i, replacement, bound, body)
 | Num(_) -> expr
 | Bool(_) -> expr
-| Null(_) -> expr
 | Unit(_) -> expr
 | Cond(i, cond, then_body, else_body) ->
     Cond(i, ssa cond id_to_replace id_replacement, ssa then_body id_to_replace id_replacement, ssa else_body id_to_replace id_replacement)

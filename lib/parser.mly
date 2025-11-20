@@ -8,7 +8,6 @@ let get i = let v = !i in i := v+1; v
 %token <string> ID
 %token TRUE
 %token FALSE
-%token NULL
 
 %token ADD
 %token SUB
@@ -144,7 +143,6 @@ term:
 | SUB; n = NUM { Num(get i, -n) }
 | TRUE { Bool(get i, true) }
 | FALSE { Bool(get i, false) }
-| NULL { Null(get i) }
 | NOT; TRUE { Bool(get i, false) }
 | NOT; FALSE { Bool(get i, true) }
 | LPARAN; e = expr; RPARAN { e }
@@ -186,7 +184,6 @@ term_with_result:
 | SUB; n = NUM { Num(get i, -n) }
 | TRUE { Bool(get i, true) }
 | FALSE { Bool(get i, false) }
-| NULL { Null(get i) }
 | NOT; TRUE { Bool(get i, false) }
 | NOT; FALSE { Bool(get i, true) }
 | LPARAN; e = expr_with_result; RPARAN { e }

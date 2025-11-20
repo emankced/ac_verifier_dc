@@ -213,7 +213,6 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
 and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h
 | Bool(_i, b) -> k (Bool(b)) h
-| Null(_i) -> k (Loc(0, "")) h
 | Unit(_i) -> k Unit h
 | Let(_i, id, bound, body) ->
     (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
@@ -502,7 +501,6 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
       else
         raise (SymbolicExecutionException "Separation violated!")
 | BinOp(_, _, lhs, rhs) -> IntSet.union (check_separation lhs env sdef h) (check_separation rhs env sdef h)
-| Null(_) -> IntSet.empty
 | Num(_, _) -> IntSet.empty
 | Bool(_, _) -> IntSet.empty
 | Unit(_) -> IntSet.empty

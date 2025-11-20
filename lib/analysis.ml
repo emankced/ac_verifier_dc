@@ -32,7 +32,6 @@ let types_to_string (t: types) : string = match t with
 | Unknown -> "Unknown"
 
 let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_type_definitions) (tm: ast_types) (res: types) : types * ast_types = match expr with
-| Null(i) -> (Null, tm |> IntMap.add i Null)
 | Num(i, _) -> (Num, tm |> IntMap.add i Num)
 | Bool(i, _) -> (Bool, tm |> IntMap.add i Bool)
 | Unit(i) -> (Unit, tm |> IntMap.add i Unit)
@@ -204,7 +203,6 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
 let rec bound_variables (expr: expression): StringSet.t = match expr with
 | Num(_, _) -> StringSet.empty
 | Bool(_, _) -> StringSet.empty
-| Null(_) -> StringSet.empty
 | Unit(_) -> StringSet.empty
 | Id(_, id) -> StringSet.add id StringSet.empty
 | Let(_, _, bound, body) -> StringSet.union (bound_variables bound) (bound_variables body)

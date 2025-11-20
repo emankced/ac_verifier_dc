@@ -12,7 +12,7 @@ let%test "Type check arithmetics" =
       res == Num && (IntMap.fold (fun _ t b -> b && t == Num) tm true)
 
 let%test "Type check arithmetics mismatch" =
-  let prog = parse "3 + 4 - 1 * 8 / null + 1" in
+  let prog = parse "3 + 4 - 1 * 8 / false + 1" in
     try
       ignore (type_check prog env sdef tm Unit);
       false
@@ -26,30 +26,20 @@ let%test "Type check conditional Num" =
       res == Num
 
 let%test "Type check conditional Loc 1" =
-  let prog = parse "struct num {n: int} in if true then malloc(num, 0) else null" in
+  let prog = parse "struct num {n: int} in if true then malloc(num, 0) else malloc(num, 3)" in
     let (res, _) = type_check prog env sdef tm Unit in
       match res with
       | Loc(id) -> String.equal id "num"
       | _ -> false
 
 let%test "Type check conditional Loc 2" =
-  let prog = parse "struct num {n: int} in if false then malloc(num, 0) else null" in
-    let (res, _) = type_check prog env sdef tm Unit in
-      match res with
-      | Loc(id) -> String.equal id "num"
+  let prog = parse "struct num {n: int} in struct num2 {n: int} in if false then malloc(num, 0) else malloc(num2, 0)" in
+    try
+      ignore (type_check prog env sdef tm Unit);
+      false
+    with
+      | TypeCheckError _ -> true
       | _ -> false
-
-let%test "Type check conditional Loc" =
-  let prog = parse "struct num {n: int} in if true then malloc(num, 0) else null" in
-    let (res, _) = type_check prog env sdef tm Unit in
-      match res with
-      | Loc(id) -> String.equal id "num"
-      | _ -> false
-
-let%test "Type check conditional Null" =
-  let prog = parse "if true then null else null" in
-    let (res, _) = type_check prog env sdef tm Unit in
-      res == Null
 
 let%test "Type check conditional Bool" =
   let prog = parse "if true then false else true" in

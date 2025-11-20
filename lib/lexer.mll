@@ -12,7 +12,6 @@ rule read =
   | num { NUM (int_of_string (Lexing.lexeme lexbuf))}
   | "true" { TRUE }
   | "false" { FALSE }
-  | "null" { NULL }
   | "**" { SEP }
   (*| "-*" { SEPIMP }*)
   (*| "->" { POINTSTO }*)
