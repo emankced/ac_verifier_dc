@@ -8,6 +8,7 @@ open Appendix_c_verifier.Preproc
 
 let () = print_endline "Appendix C Verifier"; print_newline ()
 
+let no_preprocessing = ref false
 let no_type_check = ref false
 let no_verify = ref false
 let no_interpret = ref false
@@ -17,6 +18,7 @@ let input_file = ref ""
 let anon_fun filename = input_file := filename
 
 let speclist = [
+  ("--no-preprocessing", Arg.Set no_preprocessing, "disables preprocessing step for bringing the AST in SSA form");
   ("--no-type-check", Arg.Set no_type_check, "disables type checker");
   ("--no-verify", Arg.Set no_verify, "disables symbolic execution and verification");
   ("--no-interpret", Arg.Set no_interpret, "disables program interpretation, so the input program is not executed");
@@ -46,7 +48,7 @@ let () = if String.equal "" !input_file then
       !lines
   in
     let prog = parse src in
-    let prog = ssa prog "" "" in
+    let prog = if !no_preprocessing then prog else ssa prog "" "" in
       (if !print_ast then
         (print_endline "AST:";
         print_endline (string_of_expression prog);
