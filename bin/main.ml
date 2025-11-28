@@ -70,8 +70,15 @@ let () = if String.equal "" !input_file then
           | Unit -> print_endline "Unit"
         ); print_newline ()));
       (if not !no_verify then
-        print_endline (try (let _ = verify prog in "satisfiable") with
-          | Unsatisfiable -> "unsatisfiable"
-          | Unknown -> "unknown"
-        )
+        (try
+          verify prog;
+          print_endline "satisfiable";
+          print_newline ();
+          print_endline "Postcondition:";
+          print_endline (generate_postcondition ());
+          print_newline ()
+        with
+          | Unsatisfiable -> print_endline "unsatisfiable"
+          | Unknown -> print_endline "unknown"
+        );
       )

@@ -46,6 +46,9 @@ type struct_definitions = ((string * struct_type) list StringMap.t)
 (** Map that holds the heap store *)
 type heap = (((value list) StringMap.t) IntMap.t)
 
+(** List of all environments, struct definitions and heaps at the end of the symbolic execution. This is used by the postcondition generator. *)
+let env_sdef_h_collection: (environment * struct_definitions * heap) list ref = ref []
+
 (** Memory allocation on the heap *)
 let malloc (init_values: value StringMap.t) (h: heap) : int * heap =
   if StringMap.cardinal init_values == 0 then
@@ -210,23 +213,23 @@ let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) 
       )
 | _ -> raise (SymbolicExecutionException ("TODO: Derive does not support this AST node (yet?): " ^ string_of_expression expr))*)
 
-and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> unit): unit = match expr with
-| Num(_i, n) -> k (Num(n)) h
-| Bool(_i, b) -> k (Bool(b)) h
-| Unit(_i) -> k Unit h
+and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> environment -> struct_definitions -> unit): unit = match expr with
+| Num(_i, n) -> k (Num(n)) h env sdef
+| Bool(_i, b) -> k (Bool(b)) h env sdef
+| Unit(_i) -> k Unit h env sdef
 | Let(_i, id, bound, body) ->
     (* TODO do we need to check that no struct name is used, as the interpreter does? Maybe we can built a preprocessing step for that *)
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (SymbolicExecutionException "Let ID already exists as struct name!")
     else
-      let k = (fun (res: value) (h: heap) ->
+      let k = (fun (res: value) (h: heap) _ _ ->
         let env = env |> StringMap.add id res in
         symexec body env sdef Unit h k)
       in
         symexec bound env sdef Unit h k
-| Id(_i, id) -> k (env |> StringMap.find id) h
+| Id(_i, id) -> k (env |> StringMap.find id) h env sdef
 | BinOp(_i, op, lhs, rhs) ->
-    let k = (fun (res_lhs: value) (h: heap) ->
+    let k = (fun (res_lhs: value) (h: heap) _ _ ->
         let k = (fun (res_rhs: value) (h: heap) ->
           let res_binop = (match (op, res_lhs, res_rhs) with
             | (Add, Num(lhs), Num(rhs)) -> Num(lhs + rhs)
@@ -266,9 +269,9 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let premise = get_premise assert_env sdef h in
     let assertion = derive assertion assert_env sdef h in
       solve [premise; assertion];
-      k res h
+      k res h env sdef
 | Seq(_i, expr0, expr1) ->
-    let k = (fun (res: value) (h: heap) ->
+    let k = (fun (res: value) (h: heap) _ _ ->
         symexec expr1 env sdef res h k
       )
     in
@@ -322,7 +325,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         (fun ((field, _), expr) (fields, h) ->
           let value = ref Unit in
           let value_h = ref h in
-          let concat = (fun (res: value) (h: heap): unit ->
+          let concat = (fun (res: value) (h: heap) _ _: unit ->
             value := res;
             value_h := h
           )
@@ -334,7 +337,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         (StringMap.empty, h)
       in
         let (loc, h) = malloc values_list h in
-          k (Loc(loc, id)) h
+          k (Loc(loc, id)) h env sdef
 | Mfree(_i, loc) ->
     let k = (fun (res: value) (h: heap) ->
       match res with
@@ -354,7 +357,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec loc env sdef Unit h k
 | Mset(_i, loc, field, expr) ->
-    let k = (fun (res: value) (h: heap) ->
+    let k = (fun (res: value) (h: heap) _ _ ->
       match res with
       | Loc(l, id) ->
           let k = (fun (res: value) (h: heap) ->
@@ -373,7 +376,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       | Mget(_, loc, field) ->
           let r = ref Unit in
           let k =
-            (fun res _h ->
+            (fun res _h _ _ ->
               r := res
             )
           in
@@ -395,7 +398,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           else
             let r = ref Unit in
             let k =
-              (fun res _h ->
+              (fun res _h _ _ ->
                 r := res
               )
             in
@@ -448,7 +451,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
 
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
-    let k_check_inv = (fun (res: value) (h: heap) ->
+    let k_check_inv = (fun (res: value) (h: heap) _ _ ->
       let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
       let premise = get_premise inv_env sdef h in
       let inv = derive inv inv_env sdef h in
@@ -468,7 +471,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         let inv = derive inv inv_env sdef h in
         let formula = Z3.Boolean.mk_implies ctx premise inv in
           solve [premise; formula];
-          k res h
+          k res h env sdef
         )
       in
 
@@ -487,7 +490,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           symexec body env sdef Unit h k_check_inv
         )
       in
-        k_check_inv res h;
+        k_check_inv res h env sdef;
         k_cond_false res h;
         k_cond_true res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
@@ -507,7 +510,7 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
 | Id(_, _) -> IntSet.empty
 | Mget(_, loc, _) ->
     let r = ref Unit in
-    let k = (fun (res: value) (_h: heap) ->
+    let k = (fun (res: value) (_h: heap) _ _ ->
         r := res
       ) in
       symexec loc env sdef Unit h k;
@@ -576,7 +579,7 @@ and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) 
 | BinOp(_, op, lhs, rhs) -> BinOp(op, formula_of lhs env sdef h, formula_of rhs env sdef h)
 | Mget(_, loc, field) ->
     let r = ref Unit in
-    let k = (fun res _h -> r := res) in
+    let k = (fun res _h _ _ -> r := res) in
       symexec loc env sdef Unit h k;
       (match !r with
       | Loc(addr, struct_name) -> Mget(addr, field, struct_name)
@@ -590,5 +593,14 @@ let verify (expr: expression) =
   let sdef = StringMap.empty in
   let res = Unit in
   let h = IntMap.empty in
-  let k = (fun (_res: value) (_h: heap) -> ()) in
+  let k = (fun (_res: value) (h: heap) (env: environment) (sdef: struct_definitions) -> env_sdef_h_collection := (env, sdef, h) :: !env_sdef_h_collection) in
     symexec expr env sdef res h k
+
+let generate_postcondition (_: unit) : string =
+  let premises =
+    List.map
+      (fun (env, sdef, h) -> get_premise env sdef h)
+      !env_sdef_h_collection
+  in
+  let postcondition = Z3.Boolean.mk_or ctx premises in
+    Z3.Expr.to_string postcondition
