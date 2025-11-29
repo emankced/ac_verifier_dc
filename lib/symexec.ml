@@ -105,10 +105,15 @@ let value_to_formula (value: value) (_env: environment) (_sdef: struct_definitio
 | Formula(form) -> form
 | _ -> raise (SymbolicExecutionException "value_to_formula does not support all values")
 
-let sort_of_formula (_formula: formula) (_env: environment) (_sdef: struct_definitions) (_h: heap) : Z3.Sort.sort =
-  (*raise (SymbolicExecutionException "sort_of_formula TODO")*)
-  (* TODO actually check the sort *)
-  int_sort
+let sort_of_formula (formula: formula): Z3.Sort.sort = match formula with
+| Num(_) -> int_sort
+| Bool(_) -> bool_sort
+| BinOp(Add, _, _)
+| BinOp(Sub, _, _)
+| BinOp(Mul, _, _)
+| BinOp(Div, _, _) -> int_sort
+| BinOp(_) -> bool_sort
+| _ -> raise (SymbolicExecutionException "Sort of formula may only be int or bool!")
 
 let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match formula with
 | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n
@@ -118,7 +123,7 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
       | Num(_)
       | Loc(_) -> int_sort
       | Bool(_) -> bool_sort
-      | Formula(form) -> sort_of_formula form env sdef h
+      | Formula(form) -> sort_of_formula form
       | Unit -> raise (SymbolicExecutionException "formula_to_Z3 cannot get sort of Unit...")
       )
     in
@@ -537,7 +542,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
       | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
       | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
       | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort
-      | Formula(_form) -> raise (SymbolicExecutionException "get_premise TODO") (*formula_to_Z3 form env sdef h, bool_sort*)
+      | Formula(form) -> formula_to_Z3 form env sdef h, sort_of_formula form
       | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
       in
         let sym = string_symbol id in
@@ -571,7 +576,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
                 | Formula(form) ->
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
-                    let c = Z3.Expr.mk_const ctx sym (sort_of_formula form env sdef h) in
+                    let c = Z3.Expr.mk_const ctx sym (sort_of_formula form) in
                     let eq = Z3.Boolean.mk_eq ctx c (formula_to_Z3 form env sdef h) in
                       eq :: l
                 | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
