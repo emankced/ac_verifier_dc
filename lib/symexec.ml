@@ -124,12 +124,12 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
       Z3.Expr.mk_const ctx sym sort
 | Mget(loc, field, struct_name) ->
     let struct_info = sdef |> StringMap.find struct_name in
-    (match List.find_index (fun (name, _) -> String.equal name field) struct_info with
-    | Some(_offset) ->
-        let sym = string_symbol (string_of_int loc ^ "." ^ field) in
-          Z3.Arithmetic.Integer.mk_const ctx sym (*TODO also support bool type*)
-    | None -> raise (SymbolicExecutionException "formula_to_Z3 could not find the field")
-    )
+    let (_name, expected_type) = List.find (fun (name, _expected_type) -> String.equal name field) struct_info in
+    let sym = string_symbol (string_of_int loc ^ "." ^ field) in
+      (match expected_type with
+      | NumT -> Z3.Arithmetic.Integer.mk_const ctx sym
+      | BoolT -> Z3.Boolean.mk_const ctx sym
+      )
 | BinOp(op, lhs, rhs) ->
   let lhs, rhs = (formula_to_Z3 lhs env sdef h), (formula_to_Z3 rhs env sdef h) in
   (match op with
