@@ -180,14 +180,6 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
   | _ -> raise (SymbolicExecutionException "formula_to_Z3 does not support all binops")
   )
 
-let rec insert_op_in_formula (op: binop) (formula: formula) (insert: formula) : formula = match formula with
-| BinOp(Add, lhs, rhs) -> BinOp(Add, lhs, BinOp(op, rhs, insert))
-| BinOp(Sub, lhs, rhs) -> BinOp(Sub, lhs, BinOp(op, rhs, insert))
-| BinOp(Mul, lhs, rhs) -> BinOp(Mul, lhs, BinOp(op, rhs, insert))
-| BinOp(Div, lhs, rhs) -> BinOp(Div, lhs, BinOp(op, rhs, insert))
-| BinOp(op_, lhs, rhs) -> BinOp(op_, lhs, insert_op_in_formula op rhs insert)
-| other -> BinOp(op, other, insert)
-
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = formula_to_Z3 (formula_of expr env sdef h) env sdef h (*match expr with
 | Num(_i, n) ->
     Z3.Arithmetic.Integer.mk_numeral_i ctx n
@@ -281,9 +273,9 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
             | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
             | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
-            | (op, Formula(lhs), Formula(rhs)) -> Formula(BinOp(op, lhs, rhs))
-            | (op, lhs, Formula(form)) -> Formula(BinOp(op, value_to_formula lhs env sdef h, form))
-            | (op, Formula(form), rhs) -> Formula(BinOp(op, form, value_to_formula rhs env sdef h))
+            | (op, Formula(_lhs), Formula(_rhs)) -> Formula(BinOp(op, formula_of lhs env sdef h, formula_of rhs env sdef h)) (* get formula from lhs without symexec result *)
+            | (op, lhs, Formula(_form)) -> Formula(BinOp(op, value_to_formula lhs env sdef h, formula_of rhs env sdef h))
+            | (op, Formula(_form), rhs) -> Formula(BinOp(op, formula_of lhs env sdef h, value_to_formula rhs env sdef h))
             | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
             )
           in
