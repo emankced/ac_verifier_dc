@@ -44,7 +44,7 @@ type environment = (value StringMap.t)
 type struct_definitions = ((string * struct_type) list StringMap.t)
 
 (** Map that holds the heap store *)
-type heap = (((value list) StringMap.t) IntMap.t)
+type heap = ((((value * bool) list) StringMap.t) IntMap.t) (* value and flag, which is true if the value was assigned by the assign command. For an assumption the flag would be false. *)
 
 (** List of all environments, struct definitions and heaps at the end of the symbolic execution. This is used by the postcondition generator. *)
 let env_sdef_h_collection: (environment * struct_definitions * heap) list ref = ref []
@@ -54,7 +54,7 @@ let malloc (init_values: value StringMap.t) (h: heap) : int * heap =
   if StringMap.cardinal init_values == 0 then
     raise (SymbolicExecutionException "malloc cannot allocate nothing")
   else
-    let init_values = init_values |> StringMap.map (fun v -> [v]) in
+    let init_values = init_values |> StringMap.map (fun v -> [(v, true)]) in
     let max_available_loc =
       IntMap.fold
         (fun loc fields previous_max ->
@@ -79,29 +79,31 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
     | Some _ ->
       let struct_data = IntMap.find loc h in
       let field_history = StringMap.find field struct_data in
-        List.hd field_history
+      let (v, _assigned_by_command) = List.hd field_history in
+        v
     | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
     )
 
-let rec pin_heap_version (form: formula) (h: heap) : formula = match form with
-| BinOp(op, lhs, rhs) -> BinOp(op, pin_heap_version lhs h, pin_heap_version rhs h)
+let rec pin_heap_version (form: formula) (h: heap) (assigned_by_command: bool) : formula = match form with
+| BinOp(op, lhs, rhs) -> BinOp(op, pin_heap_version lhs h assigned_by_command, pin_heap_version rhs h assigned_by_command)
 | Mget(loc, field, struct_name, version) ->
     if version != -1 then
       form
     else
       let field_history = h |> IntMap.find loc |> StringMap.find field in
-      let version = (List.length field_history - 1) in
+      let history_length = List.length field_history in
+      let version = if assigned_by_command then history_length - 1 else history_length in
         Mget(loc, field, struct_name, version)
 | _ -> form
 
 (** Memory mutation on the heap *)
-let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) : heap =
+let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) (assigned_by_command: bool) : heap =
   if IntMap.is_empty h then
     raise (SymbolicExecutionException "mset cannot set anything on an empty heap!")
   else
     let v =
       (match v with
-      | Formula(form) -> Formula(pin_heap_version form h)
+      | Formula(form) -> Formula(pin_heap_version form h assigned_by_command)
       | _ -> v
       )
     in
@@ -110,7 +112,7 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     | Some _ ->
       let struct_data = h |> IntMap.find loc in
       let field_history = struct_data |> StringMap.find field in
-      let field_history = v :: field_history in
+      let field_history = (v, assigned_by_command) :: field_history in
       let struct_data = struct_data |> StringMap.add field field_history in
         h |> IntMap.add loc struct_data
     | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
@@ -399,7 +401,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       match res with
       | Loc(l, id) ->
           let k = (fun (res: value) (h: heap) ->
-            k Unit (mset l field id res h sdef)
+            k Unit (mset l field id res h sdef true)
             )
           in
             symexec expr env sdef Unit h k
@@ -522,7 +524,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
         (fun field field_history l ->
           let newest_element_index = (List.length field_history) - 1 in
             List.fold_right
-              (fun (i, v) l ->
+              (fun (i, v, assigned_by_command) l ->
                 match v with
                 | Bool(b) ->
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
@@ -537,14 +539,17 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
                       eq :: l
                 | Formula(form) ->
+                  if assigned_by_command then
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym (sort_of_formula form) in
                     let eq = Z3.Boolean.mk_eq ctx c (formula_to_Z3 form env sdef h) in
                       eq :: l
+                  else
+                    (formula_to_Z3 form env sdef h) :: l
                 | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
               )
-              (List.mapi (fun i v -> newest_element_index - i, v) field_history)
+              (List.mapi (fun i (v, assigned_by_command) -> newest_element_index - i, v, assigned_by_command) field_history)
               l
         )
         fields
@@ -621,7 +626,7 @@ and update_h h assumption derefs_map (env: environment) (sdef: struct_definition
             | x :: xs -> List.fold_right (fun a b -> BinOp(And, a, b)) xs x
             | _ -> raise (SymbolicExecutionException "symexec: formula list needs at least one element!")
           in
-          let h = mset addr field struct_name (Formula(form)) h sdef in
+          let h = mset addr field struct_name (Formula(form)) h sdef false in
             h
         )
         fields
