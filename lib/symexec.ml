@@ -106,7 +106,9 @@ let value_to_formula (value: value) (_env: environment) (_sdef: struct_definitio
 | _ -> raise (SymbolicExecutionException "value_to_formula does not support all values")
 
 let sort_of_formula (_formula: formula) (_env: environment) (_sdef: struct_definitions) (_h: heap) : Z3.Sort.sort =
-  raise (SymbolicExecutionException "sort_of_formula TODO")
+  (*raise (SymbolicExecutionException "sort_of_formula TODO")*)
+  (* TODO actually check the sort *)
+  int_sort
 
 let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match formula with
 | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n
@@ -261,7 +263,6 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             | (op, lhs, Formula(form)) -> Formula(BinOp(op, value_to_formula lhs env sdef h, form))
             | (op, Formula(form), rhs) -> Formula(BinOp(op, form, value_to_formula rhs env sdef h))
             | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
-            (*TODO handle formulae*)
             )
           in
             k res_binop h
@@ -567,7 +568,12 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
                     let c = Z3.Expr.mk_const ctx sym int_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
                       eq :: l
-                | Formula(form) -> formula_to_Z3 form env sdef h :: l
+                | Formula(form) ->
+                    let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
+                    let sym = string_symbol id in
+                    let c = Z3.Expr.mk_const ctx sym (sort_of_formula form env sdef h) in
+                    let eq = Z3.Boolean.mk_eq ctx c (formula_to_Z3 form env sdef h) in
+                      eq :: l
                 | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
               )
               (List.mapi (fun i v -> newest_element_index - i, v) field_history)
