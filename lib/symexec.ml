@@ -308,36 +308,50 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec expr0 env sdef res h k
 | Cond(_i, cond, then_body, else_body) ->
-    (*let k = (fun (_res: value) (h: heap) ->*)
-    let cond = derive cond env sdef h in
     let premise = get_premise env sdef h in
-
+    let derived_cond = derive cond env sdef h in
     let pos =
-      (try solve [premise; cond]; true with
-      | Unsatisfiable -> false
-      | Unknown ->
-          (*TODO abstract with cond*)
-          raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
-      )
-    in
-    let neg =
-      (try solve [premise; Z3.Boolean.mk_not ctx cond]; true with
-      | Unsatisfiable -> false
-      | Unknown ->
-          (*TODO abstract with cond*)
-          raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
-      )
-    in
-      (match pos, neg with
-      | true, false -> symexec then_body env sdef Unit h k
-      | false, true -> symexec else_body env sdef Unit h k
-      | true, true ->
-          (*TODO abstract with cond*)
-          raise (SymbolicExecutionException "TODO: Cond is satisfiable for both cases")
-      | false, false ->
-          (*TODO abstract with cond*)
-          raise (SymbolicExecutionException "TODO: Cond is satisfiable for no case")
-      )
+    (try solve [premise; derived_cond]; true with
+    | Unsatisfiable -> false
+    | Unknown ->
+        (*TODO abstract with cond*)
+        raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
+    )
+  in
+  let neg =
+    (try solve [premise; Z3.Boolean.mk_not ctx derived_cond]; true with
+    | Unsatisfiable -> false
+    | Unknown ->
+        (*TODO abstract with cond*)
+        raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
+    )
+  in
+    (match pos, neg with
+    | true, false -> symexec then_body env sdef Unit h k
+    | false, true -> symexec else_body env sdef Unit h k
+    | true, true ->
+        (* assume cond and execute both branches symbolically *)
+        (* k for cond=true *)
+        let k_cond_true = (fun (res: value) (h: heap) ->
+          let assumption: expression = cond in
+          let derefs_map = find_derefs cond env sdef h in
+          let h = update_h h assumption derefs_map env sdef in
+            symexec then_body env sdef res h k
+          )
+        in
+        (* k for cond=false *)
+        let k_cond_false = (fun (res: value) (h: heap) ->
+          let assumption: expression = BinOp(-1, Eq, cond, Bool(-2, false)) in
+          let derefs_map = find_derefs cond env sdef h in
+          let h = update_h h assumption derefs_map env sdef in
+            symexec else_body env sdef res h k
+          )
+        in
+          k_cond_true Unit h;
+          k_cond_false Unit h
+    | false, false ->
+        raise (SymbolicExecutionException "Cond is not satisfiable at all. This case should be impossible!")
+    )
 
 | Struct(_i, id, fields, body) ->
     if List.length fields == 0 then
@@ -401,85 +415,6 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec loc env sdef Unit h k
 | Invariant(_, inv, While(_, cond, body)) ->
-    let rec find_derefs (expr: expression) : (string * StringSet.t) IntMap.t =
-      (match expr with
-      | BinOp(_, _op, lhs, rhs) -> IntMap.union (fun _l (t, lhs) (_t, rhs) -> Some(t, StringSet.union lhs rhs)) (find_derefs lhs) (find_derefs rhs)
-      | Mget(_, loc, field) ->
-          let r = ref Unit in
-          let k =
-            (fun res _h _ _ ->
-              r := res
-            )
-          in
-            symexec loc env sdef Unit h k;
-            (match !r with
-            | Loc(addr, struct_name) ->
-                IntMap.empty |> IntMap.add addr (struct_name, StringSet.empty |> StringSet.add field)
-            | _ -> raise (SymbolicExecutionException "find_derefs requires location!")
-            )
-      | _ -> IntMap.empty
-      )
-    in
-
-    let rec contains_deref (code: expression) (addr: int) (field: string) : bool =
-      (match code with
-      | Mget(_, loc, field_) ->
-          if not (String.equal field field_) then
-            false
-          else
-            let r = ref Unit in
-            let k =
-              (fun res _h _ _ ->
-                r := res
-              )
-            in
-              symexec loc env sdef Unit h k;
-              (match !r with
-              | Loc(addr_, _struct_name) ->
-                  addr == addr_
-              | _ -> raise (SymbolicExecutionException "find_derefs requires location!")
-              )
-      | BinOp(_, _op, lhs, rhs) -> (contains_deref lhs addr field) || (contains_deref rhs addr field)
-      | _ -> false
-      )
-    in
-
-    let rec formulae_of_deref (code: expression) (addr: int) (struct_name: string) (field: string) : formula list =
-      (match code with
-      | BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
-        (match
-          contains_deref lhs addr field,
-          contains_deref rhs addr field
-        with
-        | true, true -> List.append (formulae_of_deref lhs addr struct_name field) (formulae_of_deref rhs addr struct_name field)
-        | true, false -> formulae_of_deref lhs addr struct_name field
-        | false, true -> formulae_of_deref rhs addr struct_name field
-        | false, false -> []
-        )
-      | x -> [formula_of x env sdef h]
-      )
-    in
-
-    let update_h h assumption derefs_map : heap = IntMap.fold
-        (fun addr (struct_name, fields) h ->
-          StringSet.fold
-            (fun field h ->
-              let formulae = formulae_of_deref assumption addr struct_name field in
-              let form =
-                match formulae with
-                | x :: xs -> List.fold_right (fun a b -> BinOp(And, a, b)) xs x
-                | _ -> raise (SymbolicExecutionException "symexec: formula list needs at least one element!")
-              in
-              let h = mset addr field struct_name (Formula(form)) h sdef in
-                h
-            )
-            fields
-            h
-        )
-      derefs_map
-      h
-    in
-
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) _ _ ->
@@ -495,8 +430,8 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
 
         let assumption: expression = BinOp(-1, And, inv, BinOp(-2, Eq, cond, Bool(-3, false))) in
-        let derefs_map = find_derefs assumption in
-        let h = update_h h assumption derefs_map in
+        let derefs_map = find_derefs assumption env sdef h in
+        let h = update_h h assumption derefs_map env sdef in
 
         let premise = get_premise inv_env sdef h in
         let inv = derive inv inv_env sdef h in
@@ -511,8 +446,8 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
 
         let assumption: expression = BinOp(-1, And, inv, cond) in
-        let derefs_map = find_derefs assumption in
-        let h = update_h h assumption derefs_map in
+        let derefs_map = find_derefs assumption env sdef h in
+        let h = update_h h assumption derefs_map env sdef in
 
         let premise = get_premise inv_env sdef h in
         let inv = derive inv inv_env sdef h in
@@ -608,6 +543,81 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
     []
   in
     Z3.Boolean.mk_and ctx (List.append env_list h_list)
+
+and find_derefs (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : (string * StringSet.t) IntMap.t =
+  (match expr with
+  | BinOp(_, _op, lhs, rhs) -> IntMap.union (fun _l (t, lhs) (_t, rhs) -> Some(t, StringSet.union lhs rhs)) (find_derefs lhs env sdef h) (find_derefs rhs env sdef h)
+  | Mget(_, loc, field) ->
+      let r = ref Unit in
+      let k =
+        (fun res _h _ _ ->
+          r := res
+        )
+      in
+        symexec loc env sdef Unit h k;
+        (match !r with
+        | Loc(addr, struct_name) ->
+            IntMap.empty |> IntMap.add addr (struct_name, StringSet.empty |> StringSet.add field)
+        | _ -> raise (SymbolicExecutionException "find_derefs requires location!")
+        )
+  | _ -> IntMap.empty
+  )
+
+and contains_deref (code: expression) (addr: int) (field: string) (env: environment) (sdef: struct_definitions) (h: heap) : bool =
+  (match code with
+  | Mget(_, loc, field_) ->
+      if not (String.equal field field_) then
+        false
+      else
+        let r = ref Unit in
+        let k =
+          (fun res _h _ _ ->
+            r := res
+          )
+        in
+          symexec loc env sdef Unit h k;
+          (match !r with
+          | Loc(addr_, _struct_name) ->
+              addr == addr_
+          | _ -> raise (SymbolicExecutionException "find_derefs requires location!")
+          )
+  | BinOp(_, _op, lhs, rhs) -> (contains_deref lhs addr field env sdef h) || (contains_deref rhs addr field env sdef h)
+  | _ -> false
+  )
+
+and formulae_of_deref (code: expression) (addr: int) (struct_name: string) (field: string) (env: environment) (sdef: struct_definitions) (h: heap) : formula list =
+  (match code with
+  | BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
+    (match
+      contains_deref lhs addr field env sdef h,
+      contains_deref rhs addr field env sdef h
+    with
+    | true, true -> List.append (formulae_of_deref lhs addr struct_name field env sdef h) (formulae_of_deref rhs addr struct_name field env sdef h)
+    | true, false -> formulae_of_deref lhs addr struct_name field env sdef h
+    | false, true -> formulae_of_deref rhs addr struct_name field env sdef h
+    | false, false -> []
+    )
+  | x -> [formula_of x env sdef h]
+  )
+
+and update_h h assumption derefs_map (env: environment) (sdef: struct_definitions) : heap = IntMap.fold
+    (fun addr (struct_name, fields) h ->
+      StringSet.fold
+        (fun field h ->
+          let formulae = formulae_of_deref assumption addr struct_name field env sdef h in
+          let form =
+            match formulae with
+            | x :: xs -> List.fold_right (fun a b -> BinOp(And, a, b)) xs x
+            | _ -> raise (SymbolicExecutionException "symexec: formula list needs at least one element!")
+          in
+          let h = mset addr field struct_name (Formula(form)) h sdef in
+            h
+        )
+        fields
+        h
+    )
+  derefs_map
+  h
 
 and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : formula  = match expr with
 | Num(_, n) -> Num(n)
