@@ -422,14 +422,18 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       let k_cond_false = (fun (res: value) (h: heap) ->
         let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
 
-        let assumption: expression = BinOp(-1, And, inv, BinOp(-2, Eq, cond, Bool(-3, false))) in
+        let assumption: expression = BinOp(-1, Eq, cond, Bool(-2, false)) in
         let derefs_map = find_derefs assumption env sdef h in
-        let h = update_h h assumption derefs_map env sdef in
+        let h' = update_h h assumption derefs_map env sdef in
 
-        let premise = get_premise inv_env sdef h in
-        let inv = derive inv inv_env sdef h in
-        let formula = Z3.Boolean.mk_implies ctx premise inv in
+        let premise = get_premise inv_env sdef h' in
+        let inv_formula = derive inv inv_env sdef h' in
+        let formula = Z3.Boolean.mk_implies ctx premise inv_formula in
           solve [premise; formula];
+
+          let assumption: expression = BinOp(-1, And, inv, BinOp(-2, Eq, cond, Bool(-3, false))) in
+          let derefs_map = find_derefs assumption env sdef h in
+          let h = update_h h assumption derefs_map env sdef in
           k res h env sdef
         )
       in
@@ -452,7 +456,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         if reachable then
           let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
 
-          let assumption: expression = BinOp(-1, And, inv, cond) in
+          let assumption: expression = cond (*BinOp(-1, And, inv, cond)*) in
           let derefs_map = find_derefs assumption env sdef h in
           let h = update_h h assumption derefs_map env sdef in
 
