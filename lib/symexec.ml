@@ -257,9 +257,9 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             | (Gt, Num(lhs), Num(rhs)) -> Bool(lhs > rhs)
             | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
             | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
-            | (_, Formula(_), Formula(_))
-            | (_, _, Formula(_)) -> raise (SymbolicExecutionException "symexec BinOp: a formula may only appear on the left-hand side")
-            | (op, Formula(form), rhs) -> Formula(insert_op_in_formula op form (value_to_formula rhs env sdef h))
+            | (op, Formula(lhs), Formula(rhs)) -> Formula(BinOp(op, lhs, rhs))
+            | (op, lhs, Formula(form)) -> Formula(BinOp(op, value_to_formula lhs env sdef h, form))
+            | (op, Formula(form), rhs) -> Formula(BinOp(op, form, value_to_formula rhs env sdef h))
             | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
             (*TODO handle formulae*)
             )
@@ -580,7 +580,6 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
     []
   in
     Z3.Boolean.mk_and ctx (List.append env_list h_list)
-  (*TODO bring heap locations to the premise*)
 
 and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : formula  = match expr with
 | Num(_, n) -> Num(n)
