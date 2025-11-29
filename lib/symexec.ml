@@ -83,11 +83,28 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
     | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
     )
 
+let rec pin_heap_version (form: formula) (h: heap) : formula = match form with
+| BinOp(op, lhs, rhs) -> BinOp(op, pin_heap_version lhs h, pin_heap_version rhs h)
+| Mget(loc, field, struct_name, version) ->
+    if version != -1 then
+      form
+    else
+      let field_history = h |> IntMap.find loc |> StringMap.find field in
+      let version = (List.length field_history - 1) in
+        Mget(loc, field, struct_name, version)
+| _ -> form
+
 (** Memory mutation on the heap *)
 let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) : heap =
   if IntMap.is_empty h then
     raise (SymbolicExecutionException "mset cannot set anything on an empty heap!")
   else
+    let v =
+      (match v with
+      | Formula(form) -> Formula(pin_heap_version form h)
+      | _ -> v
+      )
+    in
     let td = sdef |> StringMap.find type_id in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some _ ->
@@ -601,7 +618,7 @@ and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) 
     let k = (fun res _h _ _ -> r := res) in
       symexec loc env sdef Unit h k;
       (match !r with
-      | Loc(addr, struct_name) -> Mget(addr, field, struct_name, -1) (* TODO allow replacing with arbitrary version *)
+      | Loc(addr, struct_name) -> Mget(addr, field, struct_name, -1) (* insert stub version *)
       | _ -> raise (SymbolicExecutionException "formula_of needs a location for Mget!")
       )
 | Id(_, id) -> Id(id)
