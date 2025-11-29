@@ -543,26 +543,27 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
     (fun loc fields l ->
       StringMap.fold
         (fun field field_history l ->
-          List.fold_right
-            (fun (i, v) l ->
-              match v with
-              | Bool(b) ->
-                  let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
-                  let sym = string_symbol id in
-                  let c = Z3.Expr.mk_const ctx sym bool_sort in
-                  let eq = Z3.Boolean.mk_eq ctx c (Z3.Boolean.mk_val ctx b) in
-                    eq :: l
-              | Num(n) ->
-                  let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
-                  let sym = string_symbol id in
-                  let c = Z3.Expr.mk_const ctx sym int_sort in
-                  let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
-                    eq :: l
-              | Formula(form) -> formula_to_Z3 form env sdef h :: l
-              | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
-            )
-            (List.mapi (fun i v -> i, v) field_history)
-            l
+          let newest_element_index = (List.length field_history) - 1 in
+            List.fold_right
+              (fun (i, v) l ->
+                match v with
+                | Bool(b) ->
+                    let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
+                    let sym = string_symbol id in
+                    let c = Z3.Expr.mk_const ctx sym bool_sort in
+                    let eq = Z3.Boolean.mk_eq ctx c (Z3.Boolean.mk_val ctx b) in
+                      eq :: l
+                | Num(n) ->
+                    let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
+                    let sym = string_symbol id in
+                    let c = Z3.Expr.mk_const ctx sym int_sort in
+                    let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
+                      eq :: l
+                | Formula(form) -> formula_to_Z3 form env sdef h :: l
+                | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
+              )
+              (List.mapi (fun i v -> newest_element_index - i, v) field_history)
+              l
         )
         fields
         l
