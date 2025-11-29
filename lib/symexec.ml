@@ -491,8 +491,8 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         )
       in
         k_check_inv res h env sdef;
-        k_cond_false res h;
-        k_cond_true res h
+        k_cond_true res h;
+        k_cond_false res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
 and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): IntSet.t = match a with
