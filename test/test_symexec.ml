@@ -209,6 +209,7 @@ let%test "Verify loop 7" =
 let%test "Verify loop 8" =
   vf "struct num { n: int } in
       let x := malloc(num, 10) in
-        @ invariant !x.n >= 5 @
+        (@ invariant !x.n >= 5 @
         while !x.n != 5 do
-          !x.n := !x.n - 1"
+          !x.n := !x.n - 1);
+        @ !x.n == 5 @"
