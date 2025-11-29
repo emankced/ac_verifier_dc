@@ -26,7 +26,7 @@ type formula =
 | Num of int
 | Bool of bool
 | Id of string
-| Mget of int * string * string
+| Mget of int * string * string * int (* location, field, struct name, version*)
 | BinOp of binop * formula * formula
 
 (** Interpretation values used in the symbolic execution *)
@@ -122,10 +122,18 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
     in
     let sym = string_symbol id in
       Z3.Expr.mk_const ctx sym sort
-| Mget(loc, field, struct_name) ->
+| Mget(loc, field, struct_name, version) ->
+    let version =
+      if version == -1 then
+        let field_history = (h |> IntMap.find loc) |> StringMap.find field in
+        let total_versions = List.length field_history in
+          total_versions - 1
+      else
+        version
+    in
     let struct_info = sdef |> StringMap.find struct_name in
     let (_name, expected_type) = List.find (fun (name, _expected_type) -> String.equal name field) struct_info in
-    let sym = string_symbol (string_of_int loc ^ "." ^ field) in
+    let sym = string_symbol (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int version) in
       (match expected_type with
       | NumT -> Z3.Arithmetic.Integer.mk_const ctx sym
       | BoolT -> Z3.Boolean.mk_const ctx sym
@@ -548,13 +556,13 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
               (fun (i, v) l ->
                 match v with
                 | Bool(b) ->
-                    let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
+                    let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym bool_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Boolean.mk_val ctx b) in
                       eq :: l
                 | Num(n) ->
-                    let id = if i == 0 then (string_of_int loc ^ "." ^ field) else (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i) in
+                    let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym int_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
@@ -583,7 +591,7 @@ and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) 
     let k = (fun res _h _ _ -> r := res) in
       symexec loc env sdef Unit h k;
       (match !r with
-      | Loc(addr, struct_name) -> Mget(addr, field, struct_name)
+      | Loc(addr, struct_name) -> Mget(addr, field, struct_name, -1) (* TODO allow replacing with arbitrary version *)
       | _ -> raise (SymbolicExecutionException "formula_of needs a location for Mget!")
       )
 | Id(_, id) -> Id(id)
