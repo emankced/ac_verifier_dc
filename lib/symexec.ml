@@ -444,17 +444,31 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
 
       (* k for cond=true and invariant*)
       let k_cond_true = (fun (res: value) (h: heap) ->
-        let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
+        (* check whether the loop body is reachable*)
+        let premise = get_premise env sdef h in
+        let cond_formula = derive cond env sdef h in
+        let formula = Z3.Boolean.mk_implies ctx premise cond_formula in
+        let reachable =
+          (try
+            solve [premise; formula];
+            true
+          with
+          | Unsatisfiable -> false
+          | Unknown -> raise (SymbolicExecutionException "symexec: satisfiability of while condition must never be unknown!")
+          )
+        in
+        if reachable then
+          let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
 
-        let assumption: expression = BinOp(-1, And, inv, cond) in
-        let derefs_map = find_derefs assumption env sdef h in
-        let h = update_h h assumption derefs_map env sdef in
+          let assumption: expression = BinOp(-1, And, inv, cond) in
+          let derefs_map = find_derefs assumption env sdef h in
+          let h = update_h h assumption derefs_map env sdef in
 
-        let premise = get_premise inv_env sdef h in
-        let inv = derive inv inv_env sdef h in
-        let formula = Z3.Boolean.mk_implies ctx premise inv in
-          solve [premise; formula];
-          symexec body env sdef Unit h k_check_inv
+          let premise = get_premise inv_env sdef h in
+          let inv = derive inv inv_env sdef h in
+          let formula = Z3.Boolean.mk_implies ctx premise inv in
+            solve [premise; formula];
+            symexec body env sdef Unit h k_check_inv
         )
       in
         k_check_inv res h env sdef;
