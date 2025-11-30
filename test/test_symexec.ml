@@ -269,3 +269,8 @@ let%test "Fibonacci 3" =
         let res := !fib.n in
           res;
           @ result == 0 @")
+
+let%test "Infinite loop" =
+  vf "@ invariant true @
+      while true do
+        5"
