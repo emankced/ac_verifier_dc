@@ -124,7 +124,7 @@ let value_to_formula (value: value) (_env: environment) (_sdef: struct_definitio
 | Formula(form) -> form
 | _ -> raise (SymbolicExecutionException "value_to_formula does not support all values")
 
-let sort_of_formula (formula: formula): Z3.Sort.sort = match formula with
+let sort_of_formula (formula: formula) (sdef: struct_definitions): Z3.Sort.sort = match formula with
 | Num(_) -> int_sort
 | Bool(_) -> bool_sort
 | BinOp(Add, _, _)
@@ -132,6 +132,13 @@ let sort_of_formula (formula: formula): Z3.Sort.sort = match formula with
 | BinOp(Mul, _, _)
 | BinOp(Div, _, _) -> int_sort
 | BinOp(_) -> bool_sort
+| Mget(_loc, field, struct_name, _version) ->
+    let struct_definitions = sdef |> StringMap.find struct_name in
+    let (_field, expected_type) = struct_definitions |> List.find (fun (f, _) -> String.equal field f) in
+      (match expected_type with
+      | NumT -> int_sort
+      | BoolT -> bool_sort
+      )
 | _ -> raise (SymbolicExecutionException "Sort of formula may only be int or bool!")
 
 let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match formula with
@@ -142,7 +149,7 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
       | Num(_)
       | Loc(_) -> int_sort
       | Bool(_) -> bool_sort
-      | Formula(form) -> sort_of_formula form
+      | Formula(form) -> sort_of_formula form sdef
       | Unit -> raise (SymbolicExecutionException "formula_to_Z3 cannot get sort of Unit...")
       )
     in
@@ -248,9 +255,16 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     if (StringMap.exists (fun k _ -> String.equal k id) sdef) then
       raise (SymbolicExecutionException "Let ID already exists as struct name!")
     else
-      let k = (fun (res: value) (h: heap) _ _ ->
-        let env = env |> StringMap.add id res in
-        symexec body env sdef Unit h k)
+      let k =
+        (fun (res: value) (h: heap) _ _ ->
+          let res =
+            match res with
+              | Formula(_form) -> Formula(formula_of bound env sdef h)
+              | _ -> res
+          in
+            let env = env |> StringMap.add id res in
+            symexec body env sdef Unit h k
+        )
       in
         symexec bound env sdef Unit h k
 | Id(_i, id) -> k (env |> StringMap.find id) h env sdef
@@ -507,7 +521,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
       | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
       | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
       | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort
-      | Formula(form) -> formula_to_Z3 form env sdef h, sort_of_formula form
+      | Formula(form) -> formula_to_Z3 form env sdef h, sort_of_formula form sdef
       | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
       in
         let sym = string_symbol id in
@@ -542,7 +556,7 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
                   if assigned_by_command then
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
-                    let c = Z3.Expr.mk_const ctx sym (sort_of_formula form) in
+                    let c = Z3.Expr.mk_const ctx sym (sort_of_formula form sdef) in
                     let eq = Z3.Boolean.mk_eq ctx c (formula_to_Z3 form env sdef h) in
                       eq :: l
                   else
