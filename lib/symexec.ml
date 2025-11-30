@@ -307,8 +307,19 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let assert_env = if res == Unit then env else env |> StringMap.add "result" res in
     let premise = get_premise assert_env sdef h in
     let assertion = derive assertion assert_env sdef h in
-    let formula = Z3.Boolean.mk_implies ctx premise assertion in
-      solve [premise; formula];
+    let implication = Z3.Boolean.mk_implies ctx premise assertion in
+    let negative_implication = Z3.Boolean.mk_implies ctx premise (Z3.Boolean.mk_not ctx assertion) in (* for checking that assertion may not be violated *)
+      solve [premise; implication];
+      (if
+        (try
+          solve [premise; negative_implication];
+          true
+        with
+        | Unsatisfiable -> false
+        | exc -> raise exc
+        )
+      then
+        raise Unsatisfiable);
       k res h env sdef
 | Seq(_i, expr0, expr1) ->
     let k = (fun (res: value) (h: heap) _ _ ->
