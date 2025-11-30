@@ -254,21 +254,23 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
 | Assert(_i, assertion) ->
     let _ = check_separation assertion env sdef h in
     let assert_env = if res == Unit then env else env |> StringMap.add "result" res in
-    let (premise, _constants) = get_premise assert_env sdef h in
+    let (premise, constants) = get_premise assert_env sdef h in
     let assertion = derive assertion assert_env sdef h in
-    let implication = Z3.Boolean.mk_implies ctx premise assertion in
-    let negative_implication = Z3.Boolean.mk_implies ctx premise (Z3.Boolean.mk_not ctx assertion) in (* for checking that assertion may not be violated *)
-      solve [premise; implication];
-      (if
-        (try
-          solve [premise; negative_implication];
-          true
-        with
-        | Unsatisfiable -> false
-        | exc -> raise exc
-        )
-      then
-        raise Unsatisfiable);
+    let formula = Z3.Boolean.mk_implies ctx premise assertion in
+      (if StringMap.is_empty constants then
+        solve [premise; formula]
+      else
+        let constants =
+          StringMap.fold
+            (fun _id c l -> c :: l)
+            constants
+            []
+        in
+        let forall = Z3.Quantifier.mk_forall_const ctx constants formula None [] [] None None in
+        let forall = Z3.Quantifier.expr_of_quantifier forall in
+          solve [forall]
+      );
+
       k res h env sdef
 | Seq(_i, expr0, expr1) ->
     let k = (fun (res: value) (h: heap) _ _ ->
