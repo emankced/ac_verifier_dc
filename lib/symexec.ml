@@ -141,9 +141,9 @@ let sort_of_formula (formula: formula) (sdef: struct_definitions): Z3.Sort.sort 
       )
 | _ -> raise (SymbolicExecutionException "Sort of formula may only be int or bool!")
 
-let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr list = match formula with
-| Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, []
-| Bool(b) -> Z3.Boolean.mk_val ctx b, []
+let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr StringMap.t = match formula with
+| Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, StringMap.empty
+| Bool(b) -> Z3.Boolean.mk_val ctx b, StringMap.empty
 | Id(id) ->
     let sort = (match env |> StringMap.find id with
       | Num(_)
@@ -155,7 +155,7 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
     in
     let sym = string_symbol id in
     let c = Z3.Expr.mk_const ctx sym sort in
-      c, [c]
+      c, StringMap.empty |> StringMap.add id c
 | Mget(loc, field, struct_name, version) ->
     let version =
       if version == -1 then
@@ -167,14 +167,15 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
     in
     let struct_info = sdef |> StringMap.find struct_name in
     let (_name, expected_type) = List.find (fun (name, _expected_type) -> String.equal name field) struct_info in
-    let sym = string_symbol (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int version) in
+    let id = (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int version) in
+    let sym = string_symbol id in
       (match expected_type with
-      | NumT -> let c = Z3.Arithmetic.Integer.mk_const ctx sym in c, [c]
-      | BoolT -> let c = Z3.Boolean.mk_const ctx sym in c, [c]
+      | NumT -> let c = Z3.Arithmetic.Integer.mk_const ctx sym in c, StringMap.empty |> StringMap.add id c
+      | BoolT -> let c = Z3.Boolean.mk_const ctx sym in c, StringMap.empty |> StringMap.add id c
       )
 | BinOp(op, lhs, rhs) ->
   let (lhs, lhc_cs), (rhs, rhs_cs) = (formula_to_Z3 lhs env sdef h), (formula_to_Z3 rhs env sdef h) in
-  let cs = List.append lhc_cs rhs_cs in
+  let cs = lhc_cs |> StringMap.union (fun _id a _b -> Some(a)) rhs_cs in
   (match op with
   | Add -> Z3.Arithmetic.mk_add ctx [lhs; rhs], cs
   | Sub -> Z3.Arithmetic.mk_sub ctx [lhs; rhs], cs
@@ -390,9 +391,15 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       let (premise, constants) = get_premise inv_env sdef h in
       let inv = derive inv inv_env sdef h in
       let formula = Z3.Boolean.mk_implies ctx premise inv in
-      if List.is_empty constants then
+      if StringMap.is_empty constants then
         solve [premise; formula] (* cannot quantify over empty constant list, therefore just check satisfiability *)
       else
+        let constants =
+          StringMap.fold
+            (fun _id c l -> c :: l)
+            constants
+            []
+        in
         let forall = Z3.Quantifier.mk_forall_const ctx constants formula None [] [] None None in
         let forall = Z3.Quantifier.expr_of_quantifier forall in
           solve [forall]
@@ -432,9 +439,15 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           let (premise, constants) = get_premise inv_env sdef h' in
           let inv_formula = derive inv inv_env sdef h' in
           let formula = Z3.Boolean.mk_implies ctx premise inv_formula in
-            (if List.is_empty constants then
+            (if StringMap.is_empty constants then
               solve [premise; formula] (* cannot quantify over empty constant list, therefore just check satisfiability *)
             else
+              let constants =
+                StringMap.fold
+                  (fun _id c l -> c :: l)
+                  constants
+                  []
+              in
               let forall = Z3.Quantifier.mk_forall_const ctx constants formula None [] [] None None in
               let forall = Z3.Quantifier.expr_of_quantifier forall in
                 solve [forall]
@@ -477,13 +490,13 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
       )
 | _ -> raise (SymbolicExecutionException "check_separation does not support this AST node!")
 
-and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr list =
+and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr StringMap.t =
   let env_list, env_constants = StringMap.fold
     (fun id v (l, cs) ->
       let v, sort, more_cs = match v with
-      | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort, []
-      | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort, []
-      | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort, []
+      | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort, StringMap.empty
+      | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort, StringMap.empty
+      | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort, StringMap.empty
       | Formula(form) ->
           let formula, constants = formula_to_Z3 form env sdef h in
             formula, sort_of_formula form sdef, constants
@@ -492,10 +505,10 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
         let sym = string_symbol id in
         let c = Z3.Expr.mk_const ctx sym sort in
         let eq = Z3.Boolean.mk_eq ctx c v in
-          eq :: l, List.append (c :: more_cs) cs
+          eq :: l, more_cs |> StringMap.add id c |> StringMap.union (fun _id a _b -> Some(a)) cs
     )
     env
-    ([], [])
+    ([], StringMap.empty)
   in
   let h_list, h_constants = IntMap.fold
     (fun loc fields (l, cs) ->
@@ -510,13 +523,13 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym bool_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Boolean.mk_val ctx b) in
-                      eq :: l, c :: cs
+                      eq :: l, cs |> StringMap.add id c
                 | Num(n) ->
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym int_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
-                      eq :: l, c :: cs
+                      eq :: l, cs |> StringMap.add id c
                 | Formula(form) ->
                   if assigned_by_command then
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
@@ -524,10 +537,10 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
                     let c = Z3.Expr.mk_const ctx sym (sort_of_formula form sdef) in
                     let form, more_cs = formula_to_Z3 form env sdef h in
                     let eq = Z3.Boolean.mk_eq ctx c form in
-                      eq :: l, List.append (c :: more_cs) cs
+                      eq :: l, more_cs |> StringMap.add id c |> StringMap.union (fun _id a _b -> Some(a)) cs
                   else
                     let form, more_cs = formula_to_Z3 form env sdef h in
-                      form :: l, List.append more_cs cs
+                      form :: l, more_cs |> StringMap.union (fun _id a _b -> Some(a)) cs
                 | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
               )
               (List.mapi (fun i (v, assigned_by_command) -> newest_element_index - i, v, assigned_by_command) field_history)
@@ -537,9 +550,9 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
         (l, cs)
     )
     h
-    ([], [])
+    ([], StringMap.empty)
   in
-  let constants = List.append env_constants h_constants in
+  let constants = env_constants |> StringMap.union (fun _id a _b -> Some(a)) h_constants in
     Z3.Boolean.mk_and ctx (List.append env_list h_list), constants
 
 and find_derefs (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : (string * StringSet.t) IntMap.t =
