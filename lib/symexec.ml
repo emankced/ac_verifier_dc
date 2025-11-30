@@ -141,9 +141,9 @@ let sort_of_formula (formula: formula) (sdef: struct_definitions): Z3.Sort.sort 
       )
 | _ -> raise (SymbolicExecutionException "Sort of formula may only be int or bool!")
 
-let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = match formula with
-| Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n
-| Bool(b) -> Z3.Boolean.mk_val ctx b
+let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr list = match formula with
+| Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, []
+| Bool(b) -> Z3.Boolean.mk_val ctx b, []
 | Id(id) ->
     let sort = (match env |> StringMap.find id with
       | Num(_)
@@ -154,7 +154,8 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
       )
     in
     let sym = string_symbol id in
-      Z3.Expr.mk_const ctx sym sort
+    let c = Z3.Expr.mk_const ctx sym sort in
+      c, [c]
 | Mget(loc, field, struct_name, version) ->
     let version =
       if version == -1 then
@@ -168,83 +169,30 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
     let (_name, expected_type) = List.find (fun (name, _expected_type) -> String.equal name field) struct_info in
     let sym = string_symbol (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int version) in
       (match expected_type with
-      | NumT -> Z3.Arithmetic.Integer.mk_const ctx sym
-      | BoolT -> Z3.Boolean.mk_const ctx sym
+      | NumT -> let c = Z3.Arithmetic.Integer.mk_const ctx sym in c, [c]
+      | BoolT -> let c = Z3.Boolean.mk_const ctx sym in c, [c]
       )
 | BinOp(op, lhs, rhs) ->
-  let lhs, rhs = (formula_to_Z3 lhs env sdef h), (formula_to_Z3 rhs env sdef h) in
+  let (lhs, lhc_cs), (rhs, rhs_cs) = (formula_to_Z3 lhs env sdef h), (formula_to_Z3 rhs env sdef h) in
+  let cs = List.append lhc_cs rhs_cs in
   (match op with
-  | Add -> Z3.Arithmetic.mk_add ctx [lhs; rhs]
-  | Sub -> Z3.Arithmetic.mk_sub ctx [lhs; rhs]
-  | Mul -> Z3.Arithmetic.mk_mul ctx [lhs; rhs]
-  | Div -> Z3.Arithmetic.mk_div ctx lhs rhs
-  | Le -> Z3.Arithmetic.mk_le ctx lhs rhs
-  | Lt -> Z3.Arithmetic.mk_lt ctx lhs rhs
-  | Ge -> Z3.Arithmetic.mk_ge ctx lhs rhs
-  | Gt -> Z3.Arithmetic.mk_gt ctx lhs rhs
-  | Eq -> Z3.Boolean.mk_eq ctx lhs rhs
-  | Ne -> Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs rhs)
-  | And | Sep -> Z3.Boolean.mk_and ctx [lhs; rhs]
-  | Or -> Z3.Boolean.mk_or ctx [lhs; rhs]
+  | Add -> Z3.Arithmetic.mk_add ctx [lhs; rhs], cs
+  | Sub -> Z3.Arithmetic.mk_sub ctx [lhs; rhs], cs
+  | Mul -> Z3.Arithmetic.mk_mul ctx [lhs; rhs], cs
+  | Div -> Z3.Arithmetic.mk_div ctx lhs rhs, cs
+  | Le -> Z3.Arithmetic.mk_le ctx lhs rhs, cs
+  | Lt -> Z3.Arithmetic.mk_lt ctx lhs rhs, cs
+  | Ge -> Z3.Arithmetic.mk_ge ctx lhs rhs, cs
+  | Gt -> Z3.Arithmetic.mk_gt ctx lhs rhs, cs
+  | Eq -> Z3.Boolean.mk_eq ctx lhs rhs, cs
+  | Ne -> Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs rhs), cs
+  | And | Sep -> Z3.Boolean.mk_and ctx [lhs; rhs], cs
+  | Or -> Z3.Boolean.mk_or ctx [lhs; rhs], cs
   | _ -> raise (SymbolicExecutionException "formula_to_Z3 does not support all binops")
   )
 
-let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr = formula_to_Z3 (formula_of expr env sdef h) env sdef h (*match expr with
-| Num(_i, n) ->
-    Z3.Arithmetic.Integer.mk_numeral_i ctx n
-| Bool(_i, b) ->
-    if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx
-| Null(_i) ->
-    Z3.Arithmetic.Integer.mk_numeral_i ctx 0
-| BinOp(_i, op, lhs, rhs) ->
-    let lhs_expr = derive lhs env sdef h in
-    let rhs_expr = derive rhs env sdef h in
-      (match op with
-      | Add -> Z3.Arithmetic.mk_add ctx [lhs_expr; rhs_expr]
-      | Sub -> Z3.Arithmetic.mk_sub ctx [lhs_expr; rhs_expr]
-      | Mul -> Z3.Arithmetic.mk_mul ctx [lhs_expr; rhs_expr]
-      | Div -> Z3.Arithmetic.mk_div ctx lhs_expr rhs_expr
-      | Eq -> Z3.Boolean.mk_eq ctx lhs_expr rhs_expr
-      | Ne -> Z3.Boolean.mk_not ctx (Z3.Boolean.mk_eq ctx lhs_expr rhs_expr)
-      | Le -> Z3.Arithmetic.mk_le ctx lhs_expr rhs_expr
-      | Lt -> Z3.Arithmetic.mk_lt ctx lhs_expr rhs_expr
-      | Ge -> Z3.Arithmetic.mk_ge ctx lhs_expr rhs_expr
-      | Gt -> Z3.Arithmetic.mk_gt ctx lhs_expr rhs_expr
-      | And -> Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr]
-      | Or -> Z3.Boolean.mk_or ctx [lhs_expr; rhs_expr]
-      | Sep -> Z3.Boolean.mk_and ctx [lhs_expr; rhs_expr] (* separation check is not done by derive *)
-      | _ -> raise (SymbolicExecutionException "TODO: derive does not support all BinOps yet!")
-      )
-| Id(i, id) -> (*let v = env |> StringMap.find id in*)
-    let sym = string_symbol id in
-      (match !type_map |> IntMap.find i with
-      | Null ->
-          Z3.Arithmetic.Integer.mk_const ctx sym
-      | Loc(_name) ->
-          Z3.Arithmetic.Integer.mk_const ctx sym
-      | Num ->
-          Z3.Arithmetic.Integer.mk_const ctx sym
-      | Bool ->
-          Z3.Boolean.mk_const ctx sym
-      | _ -> raise (SymbolicExecutionException "Derive Id does not support all types yet")
-      )
-| Mget(i, loc, _field) ->
-    let l = ref Unit in
-    let k = (fun (res: value) (_h: heap) -> l := res) in
-      symexec loc env sdef Unit h k;
-      (match !l with
-      | Loc(addr, _) ->
-          let sym = int_symbol addr in
-            (match !type_map |> IntMap.find i with
-            | Num ->
-                Z3.Arithmetic.Integer.mk_const ctx sym
-            | Bool ->
-                Z3.Boolean.mk_const ctx sym
-            | _ -> raise (SymbolicExecutionException "Derive Mget does not support all types yet")
-            )
-      | _ -> raise (SymbolicExecutionException "Derive Mget needs a location")
-      )
-| _ -> raise (SymbolicExecutionException ("TODO: Derive does not support this AST node (yet?): " ^ string_of_expression expr))*)
+let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr =
+  let formula, _constants = formula_to_Z3 (formula_of expr env sdef h) env sdef h in formula
 
 and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> environment -> struct_definitions -> unit): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h env sdef
@@ -305,7 +253,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
 | Assert(_i, assertion) ->
     let _ = check_separation assertion env sdef h in
     let assert_env = if res == Unit then env else env |> StringMap.add "result" res in
-    let premise = get_premise assert_env sdef h in
+    let (premise, _constants) = get_premise assert_env sdef h in
     let assertion = derive assertion assert_env sdef h in
     let implication = Z3.Boolean.mk_implies ctx premise assertion in
     let negative_implication = Z3.Boolean.mk_implies ctx premise (Z3.Boolean.mk_not ctx assertion) in (* for checking that assertion may not be violated *)
@@ -328,7 +276,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec expr0 env sdef res h k
 | Cond(_i, cond, then_body, else_body) ->
-    let premise = get_premise env sdef h in
+    let (premise, _constants) = get_premise env sdef h in
     let derived_cond = derive cond env sdef h in
     let pos =
     (try solve [premise; derived_cond]; true with
@@ -439,25 +387,19 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) _ _ ->
       let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
-      let premise = get_premise inv_env sdef h in
+      let (premise, constants) = get_premise inv_env sdef h in
       let inv = derive inv inv_env sdef h in
       let formula = Z3.Boolean.mk_implies ctx premise inv in
-        solve [premise; formula];
+      if List.is_empty constants then
+        solve [premise; formula] (* cannot quantify over empty constant list, therefore just check satisfiability *)
+      else
+        let forall = Z3.Quantifier.mk_forall_const ctx constants formula None [] [] None None in
+        let forall = Z3.Quantifier.expr_of_quantifier forall in
+          solve [forall]
       )
     in
       (* k for cond=false and invariant*)
       let k_cond_false = (fun (res: value) (h: heap) ->
-        let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
-
-        let assumption: expression = BinOp(-1, Eq, cond, Bool(-2, false)) in
-        let derefs_map = find_derefs assumption env sdef h in
-        let h' = update_h h assumption derefs_map env sdef in
-
-        let premise = get_premise inv_env sdef h' in
-        let inv_formula = derive inv inv_env sdef h' in
-        let formula = Z3.Boolean.mk_implies ctx premise inv_formula in
-          solve [premise; formula];
-
           let assumption: expression = BinOp(-1, And, inv, BinOp(-2, Eq, cond, Bool(-3, false))) in
           let derefs_map = find_derefs assumption env sdef h in
           let h = update_h h assumption derefs_map env sdef in
@@ -468,7 +410,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       (* k for cond=true and invariant*)
       let k_cond_true = (fun (res: value) (h: heap) ->
         (* check whether the loop body is reachable*)
-        let premise = get_premise env sdef h in
+        let (premise, _constants) = get_premise env sdef h in
         let cond_formula = derive cond env sdef h in
         let formula = Z3.Boolean.mk_implies ctx premise cond_formula in
         let reachable =
@@ -487,10 +429,16 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           let derefs_map = find_derefs assumption env sdef h in
           let h' = update_h h assumption derefs_map env sdef in
 
-          let premise = get_premise inv_env sdef h' in
+          let (premise, constants) = get_premise inv_env sdef h' in
           let inv_formula = derive inv inv_env sdef h' in
           let formula = Z3.Boolean.mk_implies ctx premise inv_formula in
-            solve [premise; formula];
+            (if List.is_empty constants then
+              solve [premise; formula] (* cannot quantify over empty constant list, therefore just check satisfiability *)
+            else
+              let forall = Z3.Quantifier.mk_forall_const ctx constants formula None [] [] None None in
+              let forall = Z3.Quantifier.expr_of_quantifier forall in
+                solve [forall]
+            );
 
             let assumption: expression = BinOp(-1, And, inv, cond) in
             let derefs_map = find_derefs assumption env sdef h in
@@ -529,65 +477,70 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
       )
 | _ -> raise (SymbolicExecutionException "check_separation does not support this AST node!")
 
-and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr =
-  let env_list = StringMap.fold
-    (fun id v l ->
-      let v, sort = match v with
-      | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort
-      | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort
-      | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort
-      | Formula(form) -> formula_to_Z3 form env sdef h, sort_of_formula form sdef
+and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr list =
+  let env_list, env_constants = StringMap.fold
+    (fun id v (l, cs) ->
+      let v, sort, more_cs = match v with
+      | Bool(b) -> (if b then Z3.Boolean.mk_true ctx else Z3.Boolean.mk_false ctx), bool_sort, []
+      | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, int_sort, []
+      | Loc(l, _name) -> Z3.Arithmetic.Integer.mk_numeral_i ctx l, int_sort, []
+      | Formula(form) ->
+          let formula, constants = formula_to_Z3 form env sdef h in
+            formula, sort_of_formula form sdef, constants
       | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
       in
         let sym = string_symbol id in
         let c = Z3.Expr.mk_const ctx sym sort in
         let eq = Z3.Boolean.mk_eq ctx c v in
-          eq :: l
+          eq :: l, List.append (c :: more_cs) cs
     )
     env
-    []
+    ([], [])
   in
-  let h_list = IntMap.fold
-    (fun loc fields l ->
+  let h_list, h_constants = IntMap.fold
+    (fun loc fields (l, cs) ->
       StringMap.fold
-        (fun field field_history l ->
+        (fun field field_history (l, cs) ->
           let newest_element_index = (List.length field_history) - 1 in
             List.fold_right
-              (fun (i, v, assigned_by_command) l ->
+              (fun (i, v, assigned_by_command) (l, cs) ->
                 match v with
                 | Bool(b) ->
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym bool_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Boolean.mk_val ctx b) in
-                      eq :: l
+                      eq :: l, c :: cs
                 | Num(n) ->
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym int_sort in
                     let eq = Z3.Boolean.mk_eq ctx c (Z3.Arithmetic.Integer.mk_numeral_i ctx n) in
-                      eq :: l
+                      eq :: l, c :: cs
                 | Formula(form) ->
                   if assigned_by_command then
                     let id = string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int i in
                     let sym = string_symbol id in
                     let c = Z3.Expr.mk_const ctx sym (sort_of_formula form sdef) in
-                    let eq = Z3.Boolean.mk_eq ctx c (formula_to_Z3 form env sdef h) in
-                      eq :: l
+                    let form, more_cs = formula_to_Z3 form env sdef h in
+                    let eq = Z3.Boolean.mk_eq ctx c form in
+                      eq :: l, List.append (c :: more_cs) cs
                   else
-                    (formula_to_Z3 form env sdef h) :: l
+                    let form, more_cs = formula_to_Z3 form env sdef h in
+                      form :: l, List.append more_cs cs
                 | _ -> raise (SymbolicExecutionException "get_premise does not support all value types yet TODO")
               )
               (List.mapi (fun i (v, assigned_by_command) -> newest_element_index - i, v, assigned_by_command) field_history)
-              l
+              (l, cs)
         )
         fields
-        l
+        (l, cs)
     )
     h
-    []
+    ([], [])
   in
-    Z3.Boolean.mk_and ctx (List.append env_list h_list)
+  let constants = List.append env_constants h_constants in
+    Z3.Boolean.mk_and ctx (List.append env_list h_list), constants
 
 and find_derefs (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : (string * StringSet.t) IntMap.t =
   (match expr with
@@ -690,7 +643,7 @@ let verify (expr: expression) =
 let generate_postcondition (_: unit) : string =
   let premises =
     List.map
-      (fun (env, sdef, h) -> get_premise env sdef h)
+      (fun (env, sdef, h) -> let premise, _constants = get_premise env sdef h in premise)
       !env_sdef_h_collection
   in
   let postcondition = Z3.Boolean.mk_or ctx premises in

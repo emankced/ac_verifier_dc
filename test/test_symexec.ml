@@ -210,9 +210,17 @@ let%test "Verify loop 8" =
   vf "struct num { n: int } in
       let x := malloc(num, 10) in
         (@ invariant !x.n >= 5 @
-        while !x.n != 5 do
+        while !x.n > 5 do
           !x.n := !x.n - 1);
         @ !x.n == 5 @"
+
+let%test "Verify loop 9" =
+  not (vf "struct num { n: int } in
+      let x := malloc(num, 10) in
+        (@ invariant !x.n >= 5 @
+        while !x.n != 5 do
+          !x.n := !x.n - 1);
+        @ !x.n == 5 @")
 
 let%test "Fibonacci 1" =
   vf "struct num { n: int} in
