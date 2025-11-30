@@ -186,9 +186,9 @@ term_with_result:
 | FALSE { Bool(get i, false) }
 | NOT; TRUE { Bool(get i, false) }
 | NOT; FALSE { Bool(get i, true) }
-| LPARAN; e = expr_with_result; RPARAN { e }
+| LPARAN; e = assrt; RPARAN { e }
 | SUB; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
-| NOT; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
+| NOT; LPARAN; e = assrt; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
 | DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
 | SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
 | NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
