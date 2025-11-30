@@ -485,13 +485,17 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
 
           let assumption: expression = cond (*BinOp(-1, And, inv, cond)*) in
           let derefs_map = find_derefs assumption env sdef h in
-          let h = update_h h assumption derefs_map env sdef in
+          let h' = update_h h assumption derefs_map env sdef in
 
-          let premise = get_premise inv_env sdef h in
-          let inv = derive inv inv_env sdef h in
-          let formula = Z3.Boolean.mk_implies ctx premise inv in
+          let premise = get_premise inv_env sdef h' in
+          let inv_formula = derive inv inv_env sdef h' in
+          let formula = Z3.Boolean.mk_implies ctx premise inv_formula in
             solve [premise; formula];
-            symexec body env sdef Unit h k_check_inv
+
+            let assumption: expression = BinOp(-1, And, inv, cond) in
+            let derefs_map = find_derefs assumption env sdef h in
+            let h = update_h h assumption derefs_map env sdef in
+              symexec body env sdef Unit h k_check_inv
         )
       in
         k_check_inv res h env sdef;
