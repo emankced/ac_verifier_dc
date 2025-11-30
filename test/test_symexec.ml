@@ -213,3 +213,51 @@ let%test "Verify loop 8" =
         while !x.n != 5 do
           !x.n := !x.n - 1);
         @ !x.n == 5 @"
+
+let%test "Fibonacci 1" =
+  vf "struct num { n: int} in
+      let n := malloc(num, 10) in
+      let fib := malloc(num, 0) in
+      let fib2 := malloc(num, 1) in
+        (@ invariant !n.n >= 0 ** !fib.n >= 0 ** !fib2.n >= 0 @
+        while !n.n > 0 do
+          !n.n := !n.n - 1;
+          let x := !fib.n + !fib2.n in
+            !fib2.n := !fib.n;
+            !fib.n := x
+        );
+        let res := !fib.n in
+          res;
+          @ result >= 0 @"
+
+let%test "Fibonacci 2" =
+  not (vf "struct num { n: int} in
+      let n := malloc(num, 10) in
+      let fib := malloc(num, 0) in
+      let fib2 := malloc(num, 1) in
+        (@ invariant !n.n >= 0 ** !fib.n >= 0 ** !fib2.n >= 0 @
+        while !n.n > 0 do
+          !n.n := !n.n - 1;
+          let x := !fib.n + !fib2.n in
+            !fib2.n := !fib.n;
+            !fib.n := x
+        );
+        let res := !fib.n in
+          res;
+          @ result > 0 @")
+
+let%test "Fibonacci 3" =
+  not (vf "struct num { n: int} in
+      let n := malloc(num, 10) in
+      let fib := malloc(num, 0) in
+      let fib2 := malloc(num, 1) in
+        (@ invariant !n.n >= 0 ** !fib.n >= 0 ** !fib2.n >= 0 @
+        while !n.n > 0 do
+          !n.n := !n.n - 1;
+          let x := !fib.n + !fib2.n in
+            !fib2.n := !fib.n;
+            !fib.n := x
+        );
+        let res := !fib.n in
+          res;
+          @ result == 0 @")

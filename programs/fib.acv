@@ -11,4 +11,4 @@ let fib2 := malloc(num, 1) in
   );
   let res := !fib.n in
     res;
-    @ result > 5 @
+    @ result >= 0 @
