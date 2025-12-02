@@ -19,8 +19,8 @@ exception Unknown of string
 
 let solve formula = match Z3.Solver.check solver formula with
 | SATISFIABLE -> ()
-| UNSATISFIABLE -> raise (Unsatisfiable ("Solver returned UNSATISFIABLE! formula:\n" ^ Z3.Expr.to_string (Z3.Boolean.mk_and ctx formula)))
-| UNKNOWN -> raise (Unknown ("Solver returned UNKNOWN! formula:\n" ^ Z3.Expr.to_string (Z3.Boolean.mk_and ctx formula)))
+| UNSATISFIABLE -> raise (Unsatisfiable ("Solver returned UNSATISFIABLE! formula:\n" ^ Z3.Expr.to_string (if List.length formula == 1 then List.hd formula else Z3.Boolean.mk_and ctx formula)))
+| UNKNOWN -> raise (Unknown ("Solver returned UNKNOWN! formula:\n" ^ Z3.Expr.to_string (if List.length formula == 1 then List.hd formula else Z3.Boolean.mk_and ctx formula)))
 
 type formula =
 | Num of int
