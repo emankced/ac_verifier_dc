@@ -663,3 +663,55 @@ let generate_postcondition (_: unit) : string =
   in
   let postcondition = Z3.Boolean.mk_or ctx premises in
     Z3.Expr.to_string postcondition
+
+let get_locations_missing_symbol_definition (_: unit): IntSet.t =
+  let rec check_missing_in_formula (form: formula) (h: heap) : IntSet.t =
+    match form with
+    | BinOp(_op, lhs, rhs) -> check_missing_in_formula lhs h |> IntSet.union (check_missing_in_formula rhs h)
+    | Mget(loc, _field, _struct_name, _version) ->
+        (match h |> IntMap.find_opt loc with
+        | Some(_) -> IntSet.empty
+        | None -> IntSet.empty |> IntSet.add loc
+        )
+    | _ -> IntSet.empty
+  in
+  let missing =
+    List.fold_right
+      (fun (env, _sdef, h) missing ->
+        let missing =
+          StringMap.fold
+            (fun _id v missing ->
+              match v with
+              | Formula(form) -> check_missing_in_formula form h |> IntSet.union missing
+              | _ -> missing
+            )
+            env
+            missing
+        in
+
+        let missing =
+          IntMap.fold
+            (fun _loc fields missing ->
+              StringMap.fold
+                (fun _id values missing ->
+                  List.fold_right
+                    (fun (v, _by_assign) missing ->
+                      match v with
+                      | Formula(form) -> check_missing_in_formula form h |> IntSet.union missing
+                      | _ -> missing
+                    )
+                    values
+                    missing
+                )
+                fields
+                missing
+            )
+            h
+            missing
+        in
+          missing
+      )
+      !env_sdef_h_collection
+      IntSet.empty
+  in
+    missing

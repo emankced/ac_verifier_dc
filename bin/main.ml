@@ -72,13 +72,26 @@ let () = if String.equal "" !input_file then
       (if not !no_verify then
         (try
           verify prog;
-          print_endline "satisfiable";
-          print_newline ();
-          print_endline "Postcondition:";
-          print_endline (generate_postcondition ());
-          print_newline ()
+          print_endline "satisfiable"
         with
           | Unsatisfiable -> print_endline "unsatisfiable"
           | Unknown -> print_endline "unknown"
         );
+        print_newline ();
+
+        let missing = get_locations_missing_symbol_definition () in
+          if not (IntSet.is_empty missing) then
+            (print_endline "ATTENTION!";
+            print_endline "THE FOLLOWING LOCATIONS HAVE LOST THEIR SYMBOL DEFINITIONS:";
+            IntSet.iter
+              (fun loc ->
+                print_endline (" - location " ^ string_of_int loc ^ " has no symbol definitions")
+              )
+              missing;
+            print_endline "THEREFORE THE POSTCONDITION CANNOT BE GENERATED"
+            )
+          else
+            (print_endline "Postcondition:";
+            print_endline (generate_postcondition ());
+            )
       )
