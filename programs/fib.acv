@@ -9,6 +9,5 @@ let fib2 := malloc(num, 1) in
       !fib2.n := !fib.n;
       !fib.n := x
   );
-  let res := !fib.n in
-    res;
-    @ result >= 0 @
+  !fib.n;
+  @ result >= 0 @
