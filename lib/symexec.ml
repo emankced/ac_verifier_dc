@@ -466,27 +466,41 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         k_cond_false res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
-and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): IntSet.t = match a with
+and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): StringSet.t IntMap.t = match a with
 | BinOp(_, Sep, lhs, rhs) ->
     let lhs = check_separation lhs env sdef h in
     let rhs = check_separation rhs env sdef h in
-      if IntSet.disjoint lhs rhs then
-        IntSet.union lhs rhs
-      else
-        raise (SymbolicExecutionException "Separation violated!")
-| BinOp(_, _, lhs, rhs) -> IntSet.union (check_separation lhs env sdef h) (check_separation rhs env sdef h)
-| Num(_, _) -> IntSet.empty
-| Bool(_, _) -> IntSet.empty
-| Unit(_) -> IntSet.empty
-| Id(_, _) -> IntSet.empty
-| Mget(_, loc, _) ->
+      IntMap.union
+        (fun _loc lhs_fields rhs_fields ->
+          if StringSet.disjoint lhs_fields rhs_fields then
+            Some(StringSet.union lhs_fields rhs_fields)
+          else
+            raise (SymbolicExecutionException "Separation violated!")
+        )
+        lhs
+        rhs
+| BinOp(_, _, lhs, rhs) ->
+    IntMap.union
+      (fun _loc lhs_fields rhs_fields ->
+        if StringSet.disjoint lhs_fields rhs_fields then
+          Some(StringSet.union lhs_fields rhs_fields)
+        else
+          raise (SymbolicExecutionException "Separation violated!")
+      )
+      (check_separation lhs env sdef h)
+      (check_separation rhs env sdef h)
+| Num(_, _) -> IntMap.empty
+| Bool(_, _) -> IntMap.empty
+| Unit(_) -> IntMap.empty
+| Id(_, _) -> IntMap.empty
+| Mget(_, loc, field) ->
     let r = ref Unit in
     let k = (fun (res: value) (_h: heap) _ _ ->
         r := res
       ) in
       symexec loc env sdef Unit h k;
       (match !r with
-      | Loc(l, _) -> IntSet.empty |> IntSet.add l
+      | Loc(l, _) -> IntMap.empty |> IntMap.add l (StringSet.empty |> StringSet.add field)
       | Formula(_) -> raise (SymbolicExecutionException "Separation violated due to abstracted location!")
       | _ -> raise (SymbolicExecutionException "check_separation expected location!")
       )
