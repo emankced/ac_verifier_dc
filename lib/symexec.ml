@@ -14,13 +14,13 @@ let solver = Z3.Solver.mk_simple_solver ctx
 
 exception SymbolicExecutionException of string
 
-exception Unsatisfiable
-exception Unknown
+exception Unsatisfiable of string
+exception Unknown of string
 
 let solve formula = match Z3.Solver.check solver formula with
 | SATISFIABLE -> ()
-| UNSATISFIABLE -> raise Unsatisfiable
-| UNKNOWN -> raise Unknown (* should unknown raise an exception? *)
+| UNSATISFIABLE -> raise (Unsatisfiable ("Solver returned UNSATISFIABLE! formula:\n" ^ Z3.Expr.to_string (Z3.Boolean.mk_and ctx formula)))
+| UNKNOWN -> raise (Unknown ("Solver returned UNKNOWN! formula:\n" ^ Z3.Expr.to_string (Z3.Boolean.mk_and ctx formula)))
 
 type formula =
 | Num of int
@@ -283,16 +283,16 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     let derived_cond = derive cond env sdef h in
     let pos =
     (try solve [premise; derived_cond]; true with
-    | Unsatisfiable -> false
-    | Unknown ->
+    | Unsatisfiable(_) -> false
+    | Unknown(_) ->
         (*TODO abstract with cond*)
         raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
     )
   in
   let neg =
     (try solve [premise; Z3.Boolean.mk_not ctx derived_cond]; true with
-    | Unsatisfiable -> false
-    | Unknown ->
+    | Unsatisfiable(_) -> false
+    | Unknown(_) ->
         (*TODO abstract with cond*)
         raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
     )
@@ -427,8 +427,8 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             solve [premise; formula];
             true
           with
-          | Unsatisfiable -> false
-          | Unknown -> raise (SymbolicExecutionException "symexec: satisfiability of while condition must never be unknown!")
+          | Unsatisfiable(_) -> false
+          | Unknown(_) -> raise (SymbolicExecutionException "symexec: satisfiability of while condition must never be unknown!")
           )
         in
         if reachable then
