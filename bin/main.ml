@@ -76,19 +76,23 @@ let () = if String.equal "" !input_file then
             true
           with
             | Unsatisfiable(msg) ->
-                print_endline "Verification failed!";
-                print_endline msg;
-                print_newline ();
-                false
+              print_endline "Verification failed!";
+              print_endline msg;
+              print_newline ();
+              false
             | Unknown(msg) ->
               print_endline "Verification could not complete. Satisfiability of formula is unkown.";
               print_endline msg;
               print_newline ();
-              false
+              exit 2
+            | SeparationViolated(loc, field) ->
+              print_endline ("Separation violated by " ^ string_of_int loc ^ "." ^ field ^ "!");
+              print_newline ();
+              exit 3
           )
         in
 
-        let missing = get_locations_missing_symbol_definition () in
+        (let missing = get_locations_missing_symbol_definition () in
           if not (IntSet.is_empty missing) then
             (print_endline "ATTENTION!";
             print_endline "THE FOLLOWING LOCATIONS HAVE LOST THEIR SYMBOL DEFINITIONS:";
@@ -111,4 +115,7 @@ let () = if String.equal "" !input_file then
             print_endline "Postcondition:";
             print_endline (generate_postcondition ());
             )
+        );
+        if not success then
+          exit 1
       )

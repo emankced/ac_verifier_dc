@@ -17,6 +17,8 @@ exception SymbolicExecutionException of string
 exception Unsatisfiable of string
 exception Unknown of string
 
+exception SeparationViolated of int * string
+
 let solve formula = match Z3.Solver.check solver formula with
 | SATISFIABLE -> ()
 | UNSATISFIABLE -> raise (Unsatisfiable ("Solver returned UNSATISFIABLE! formula:\n" ^ Z3.Expr.to_string (if List.length formula == 1 then List.hd formula else Z3.Boolean.mk_and ctx formula)))
@@ -471,21 +473,23 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
     let lhs = check_separation lhs env sdef h in
     let rhs = check_separation rhs env sdef h in
       IntMap.union
-        (fun _loc lhs_fields rhs_fields ->
-          if StringSet.disjoint lhs_fields rhs_fields then
+        (fun loc lhs_fields rhs_fields ->
+          let intersection = StringSet.inter lhs_fields rhs_fields in
+          if StringSet.cardinal intersection == 0 then
             Some(StringSet.union lhs_fields rhs_fields)
           else
-            raise (SymbolicExecutionException "Separation violated!")
+            raise (SeparationViolated(loc, (StringSet.find_first (fun _ -> true) intersection)))
         )
         lhs
         rhs
 | BinOp(_, _, lhs, rhs) ->
     IntMap.union
-      (fun _loc lhs_fields rhs_fields ->
-        if StringSet.disjoint lhs_fields rhs_fields then
+      (fun loc lhs_fields rhs_fields ->
+        let intersection = StringSet.inter lhs_fields rhs_fields in
+        if StringSet.cardinal intersection == 0 then
           Some(StringSet.union lhs_fields rhs_fields)
         else
-          raise (SymbolicExecutionException "Separation violated!")
+          raise (SeparationViolated(loc, (StringSet.find_first (fun _ -> true) intersection)))
       )
       (check_separation lhs env sdef h)
       (check_separation rhs env sdef h)
