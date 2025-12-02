@@ -70,18 +70,23 @@ let () = if String.equal "" !input_file then
           | Unit -> print_endline "Unit"
         ); print_newline ()));
       (if not !no_verify then
-        (try
-          verify prog;
-          print_endline "Verification successful!"
-        with
-          | Unsatisfiable(msg) ->
-              print_endline "Verification failed!";
-              print_endline msg
-          | Unknown(msg) ->
-            print_endline "Verification could not complete. Satisfiability of formula is unkown.";
-            print_endline msg
-        );
-        print_newline ();
+        let success =
+          (try
+            verify prog;
+            true
+          with
+            | Unsatisfiable(msg) ->
+                print_endline "Verification failed!";
+                print_endline msg;
+                print_newline ();
+                false
+            | Unknown(msg) ->
+              print_endline "Verification could not complete. Satisfiability of formula is unkown.";
+              print_endline msg;
+              print_newline ();
+              false
+          )
+        in
 
         let missing = get_locations_missing_symbol_definition () in
           if not (IntSet.is_empty missing) then
@@ -92,10 +97,18 @@ let () = if String.equal "" !input_file then
                 print_endline (" - location " ^ string_of_int loc ^ " has no symbol definitions")
               )
               missing;
-            print_endline "THEREFORE THE POSTCONDITION CANNOT BE GENERATED AND THE PROOF MAY BE FAULTY"
+            print_endline "THEREFORE THE POSTCONDITION CANNOT BE GENERATED AND THE PROOF MAY BE FAULTY!";
+            if success then
+              print_endline "THE VERIFICATION WAS SUCCESSFUL, BUT IT MAY BE FAULTY!"
             )
           else
-            (print_endline "Postcondition:";
+            ((if success then
+              (
+                print_endline "Verification successful!";
+                print_newline ();
+              )
+            );
+            print_endline "Postcondition:";
             print_endline (generate_postcondition ());
             )
       )
