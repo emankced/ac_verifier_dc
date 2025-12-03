@@ -1,0 +1,10 @@
+struct num {n: int} in
+let n := malloc(num, 10) in
+  (@ invariant true @
+  while !n.n > 0 do
+    !n.n := !n.n - 1
+  );
+  (if !n.n < 0 then
+    !n.n := -(!n.n)
+  );
+  !n.n

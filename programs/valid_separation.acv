@@ -1,0 +1,10 @@
+struct num {n: int} in
+struct tuple {n: int, m: int} in
+let x := malloc(num, 3) in
+let y := malloc(num, 5) in
+let z := malloc(tuple, 1, 2) in
+	@ x == x ** x == x @;
+	@ !z.n > 0 ** !z.m > 0 @;
+	@ !z.n < !x.n ** !y.n < 10 @;
+	@ !x.n == 3 ** !y.n == 5 ** !z.n == 1 @;
+	@ (!x.n == 3 ** !y.n == 5 ** !z.n == 1) && !z.n < !x.n && !x.n < !y.n @

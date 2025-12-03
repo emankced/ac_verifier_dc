@@ -1,0 +1,5 @@
+struct num {n: int} in
+let x := malloc(num, 3) in
+let y := malloc(num, 5) in
+let z := y in
+	@ !z.n < !x.n ** !y.n < 10 @
