@@ -254,7 +254,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec lhs env sdef res h k
 | Assert(_i, assertion) ->
-    let _ = check_separation assertion env sdef h in
+    let _ = check_separation assertion env sdef h false in
     let assert_env = if res == Unit then env else env |> StringMap.add "result" res in
     let (premise, constants) = get_premise assert_env sdef h in
     let assertion = derive assertion assert_env sdef h in
@@ -388,7 +388,7 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     in
       symexec loc env sdef Unit h k
 | Invariant(_, inv, While(_, cond, body)) ->
-    let _ = check_separation inv env sdef h in
+    let _ = check_separation inv env sdef h false in
     (* k for checking the invariant*)
     let k_check_inv = (fun (res: value) (h: heap) _ _ ->
       let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
@@ -468,10 +468,10 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         k_cond_false res h
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
-and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): StringSet.t IntMap.t = match a with
+and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap) (inside_separating_conjunction: bool): StringSet.t IntMap.t = match a with
 | BinOp(_, Sep, lhs, rhs) ->
-    let lhs = check_separation lhs env sdef h in
-    let rhs = check_separation rhs env sdef h in
+    let lhs = check_separation lhs env sdef h true in
+    let rhs = check_separation rhs env sdef h true in
       IntMap.union
         (fun loc lhs_fields rhs_fields ->
           let intersection = StringSet.inter lhs_fields rhs_fields in
@@ -483,16 +483,21 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
         lhs
         rhs
 | BinOp(_, _, lhs, rhs) ->
-    IntMap.union
-      (fun loc lhs_fields rhs_fields ->
-        let intersection = StringSet.inter lhs_fields rhs_fields in
-        if StringSet.cardinal intersection == 0 then
-          Some(StringSet.union lhs_fields rhs_fields)
-        else
-          raise (SeparationViolated(loc, (StringSet.find_first (fun _ -> true) intersection)))
-      )
-      (check_separation lhs env sdef h)
-      (check_separation rhs env sdef h)
+    let lhs = check_separation lhs env sdef h inside_separating_conjunction in
+    let rhs = check_separation rhs env sdef h inside_separating_conjunction in
+      if inside_separating_conjunction then
+        IntMap.union
+          (fun loc lhs_fields rhs_fields ->
+            let intersection = StringSet.inter lhs_fields rhs_fields in
+            if StringSet.cardinal intersection == 0 then
+              Some(StringSet.union lhs_fields rhs_fields)
+            else
+              raise (SeparationViolated(loc, (StringSet.find_first (fun _ -> true) intersection)))
+          )
+          lhs
+          rhs
+      else
+        IntMap.empty
 | Num(_, _) -> IntMap.empty
 | Bool(_, _) -> IntMap.empty
 | Unit(_) -> IntMap.empty
