@@ -23,3 +23,8 @@ The tests can be executed by running:
 ```
 opam exec -- dune test
 ```
+
+More verbose exception and trace printing can be enabled by setting an environment variable:
+```
+export OCAMLRUNPARAM=b
+```
