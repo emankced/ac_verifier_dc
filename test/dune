@@ -1,5 +1,5 @@
 (library
- (name test_appendix_c_verifier)
- (libraries appendix_c_verifier)
+ (name test_dc)
+ (libraries dc)
  (inline_tests)
  (preprocess (pps ppx_inline_test)))

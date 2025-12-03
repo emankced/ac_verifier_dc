@@ -1,8 +1,8 @@
-open Appendix_c_verifier.Parse
-open Appendix_c_verifier.Symexec
-open Appendix_c_verifier.Preproc
-open Appendix_c_verifier.Analysis
-open Appendix_c_verifier.Common
+open Dc.Parse
+open Dc.Symexec
+open Dc.Preproc
+open Dc.Analysis
+open Dc.Common
 
 let vf (src: string): bool =
   let prog = parse src in

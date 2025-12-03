@@ -1,4 +1,4 @@
 (executable
- (public_name appendix_c_verifier)
+ (public_name dc)
  (name main)
- (libraries appendix_c_verifier))
+ (libraries dc))

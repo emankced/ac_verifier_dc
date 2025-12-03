@@ -1,5 +1,5 @@
-# Appendix C Verifier
-This is not the final name.
+# DC Verifier for AC Programs
+DC is a program verifier for the AC programming language, that is designed to keep it simple. The verification is based on symbolic execution, while the assertion language supports separation logic.
 
 ## Building and Running
 Dependencies can be installed by running:
@@ -16,7 +16,7 @@ opam exec -- dune build
 
 The program can be started by running:
 ```
-opam exec -- dune exec appendix_c_verifier
+opam exec -- dune exec dc
 ```
 
 The tests can be executed by running:

@@ -1,7 +1,7 @@
-open Appendix_c_verifier.Ast
-open Appendix_c_verifier.Interpreter
-open Appendix_c_verifier.Parse
-open Appendix_c_verifier.Common
+open Dc.Ast
+open Dc.Interpreter
+open Dc.Parse
+open Dc.Common
 
 let env: environment = StringMap.empty
 let sdef: struct_definitions = StringMap.empty

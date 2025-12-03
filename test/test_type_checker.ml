@@ -1,6 +1,6 @@
-open Appendix_c_verifier.Parse
-open Appendix_c_verifier.Analysis
-open Appendix_c_verifier.Common
+open Dc.Parse
+open Dc.Analysis
+open Dc.Common
 
 let env: type_environment = StringMap.empty
 let sdef: struct_type_definitions = StringMap.empty

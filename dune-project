@@ -1,27 +1,27 @@
 (lang dune 3.17)
 
-(name appendix_c_verifier)
+(name dc)
 
 (generate_opam_files true)
 
-(source
- (github username/reponame))
+;(source
+; (github username/reponame))
 
-(authors "Author Name <author@example.com>")
+(authors "Jonas Pflanzer <noreply@example.com>")
 
-(maintainers "Maintainer Name <maintainer@example.com>")
+;(maintainers "Maintainer Name <maintainer@example.com>")
 
-(license LICENSE)
+;(license LICENSE)
 
-(documentation https://url/to/documentation)
+;(documentation https://url/to/documentation)
 
 (package
- (name appendix_c_verifier)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (name dc)
+ (synopsis "DC, the program verifier for AC.")
+ (description "DC is a program verifier for the AC programming language, that is designed to keep it simple. The verification is based on symbolic execution, while the assertion language supports separation logic.")
  (depends ocaml (ppx_inline_test :with-test) menhir z3)
  (tags
-  ("add topics" "to describe" your project)))
+  ("DC" "AC" "verifier" "formal verification" "symbolic execution" "separation logic")))
 
 (using menhir 3.0)
 

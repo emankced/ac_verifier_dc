@@ -1,12 +1,12 @@
-open Appendix_c_verifier.Ast
-open Appendix_c_verifier.Interpreter
-open Appendix_c_verifier.Parse
-open Appendix_c_verifier.Analysis
-open Appendix_c_verifier.Symexec
-open Appendix_c_verifier.Common
-open Appendix_c_verifier.Preproc
+open Dc.Ast
+open Dc.Interpreter
+open Dc.Parse
+open Dc.Analysis
+open Dc.Symexec
+open Dc.Common
+open Dc.Preproc
 
-let () = print_endline "Appendix C Verifier"; print_newline ()
+let () = print_endline "DC Verifier for AC programs"; print_newline ()
 
 let no_preprocessing = ref false
 let no_type_check = ref false
