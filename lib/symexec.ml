@@ -390,10 +390,9 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
 | Invariant(_, inv, While(_, cond, body)) ->
     let _ = check_separation inv env sdef h in
     (* k for checking the invariant*)
-    let k_check_inv = (fun (res: value) (h: heap) _ _ ->
-      let inv_env = if res == Unit then env else env |> StringMap.add "result" res in
-      let (premise, constants) = get_premise inv_env sdef h in
-      let inv = derive inv inv_env sdef h in
+    let k_check_inv = (fun (_res: value) (h: heap) _ _ ->
+      let (premise, constants) = get_premise env sdef h in
+      let inv = derive inv env sdef h in
       let formula = Z3.Boolean.mk_implies ctx premise inv in
       if StringMap.is_empty constants then
         solve [premise; formula] (* cannot quantify over empty constant list, therefore just check satisfiability *)
@@ -409,17 +408,17 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
           solve [forall]
       )
     in
-      (* k for cond=false and invariant*)
-      let k_cond_false = (fun (res: value) (h: heap) ->
+      (* cond=false *)
+      let cond_false = (fun (_: unit) ->
           let assumption: expression = BinOp(-1, And, inv, BinOp(-2, Eq, cond, Bool(-3, false))) in
           let derefs_map = find_derefs assumption env sdef h in
           let h = update_h h assumption derefs_map env sdef in
-            k res h env sdef
+            k Unit h env sdef
         )
       in
 
-      (* k for cond=true and invariant*)
-      let k_cond_true = (fun (res: value) (h: heap) ->
+      (* cond=true *)
+      let cond_true = (fun (_: unit) ->
         (* check whether the loop body is reachable*)
         let (premise, _constants) = get_premise env sdef h in
         let cond_formula = derive cond env sdef h in
@@ -437,12 +436,12 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             let assumption: expression = BinOp(-1, And, inv, cond) in
             let derefs_map = find_derefs assumption env sdef h in
             let h = update_h h assumption derefs_map env sdef in
-              symexec body env sdef res h k_check_inv
+              symexec body env sdef Unit h k_check_inv
         )
       in
         k_check_inv res h env sdef;
-        k_cond_true res h;
-        k_cond_false res h
+        cond_true ();
+        cond_false ()
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
 and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): StringSet.t IntMap.t = match a with
