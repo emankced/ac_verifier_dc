@@ -1,0 +1,15 @@
+struct num {n: int} in
+let x := malloc(num, 0) in
+let y := malloc(num, 0) in
+let res := malloc(num, 0) in
+let limit := 10 in
+	(@ invariant (!x.n >= 0 && !x.n <= limit) ** !res.n >= 0 @
+	while !x.n < limit do
+	    !y.n := 0;
+		(@ invariant (!y.n >= 0 && !y.n <= !x.n) ** !res.n >= 0 @
+		while !y.n < !x.n do
+			!res.n := !x.n * !x.n + !y.n + 1;
+			!y.n := !y.n + 1);
+		!x.n := !x.n + 1);
+	!res.n;
+	@ result >= 0 @
