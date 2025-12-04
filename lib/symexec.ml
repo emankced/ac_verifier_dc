@@ -644,7 +644,12 @@ let verify (expr: expression) =
   let sdef = StringMap.empty in
   let res = Unit in
   let h = IntMap.empty in
-  let k = (fun (_res: value) (h: heap) (env: environment) (sdef: struct_definitions) -> env_sdef_h_collection := (env, sdef, h) :: !env_sdef_h_collection) in
+  let k =
+    (fun (res: value) (h: heap) (env: environment) (sdef: struct_definitions) ->
+      let env = if res == Unit then env else env |> StringMap.add "result" res in
+      env_sdef_h_collection := (env, sdef, h) :: !env_sdef_h_collection
+    )
+  in
     symexec expr env sdef res h k
 
 let generate_postcondition (_: unit) : string =
