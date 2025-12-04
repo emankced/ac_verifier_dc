@@ -7,7 +7,8 @@ let fib := malloc(tuple, 0, 1) in
     !n.n := !n.n - 1;
     let x := !fib.fib0 + !fib.fib1 in
       !fib.fib1 := !fib.fib0;
-      !fib.fib0 := x
+      !fib.fib0 := x;
+      @ !fib.fib0 >= !fib.fib1 @
   );
   !fib.fib0;
   @ result >= 0 @
