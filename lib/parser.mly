@@ -140,17 +140,12 @@ expr:
 
 term:
 | n = NUM { Num(get i, n) }
-| SUB; n = NUM { Num(get i, -n) }
 | TRUE { Bool(get i, true) }
 | FALSE { Bool(get i, false) }
-| NOT; TRUE { Bool(get i, false) }
-| NOT; FALSE { Bool(get i, true) }
 | LPARAN; e = expr; RPARAN { e }
-| SUB; LPARAN; e = expr; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
-| NOT; LPARAN; e = expr; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
 | DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
-| SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
-| NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
+| SUB; t = term {BinOp(get i, Sub, Num(get i, 0), t) }
+| NOT; t = term { BinOp(get i, Eq, t, Bool(get i, false)) }
 | id = ID; { Id(get i, id) }
 ;
 
@@ -181,18 +176,12 @@ expr_with_result:
 
 term_with_result:
 | n = NUM { Num(get i, n) }
-| SUB; n = NUM { Num(get i, -n) }
 | TRUE { Bool(get i, true) }
 | FALSE { Bool(get i, false) }
-| NOT; TRUE { Bool(get i, false) }
-| NOT; FALSE { Bool(get i, true) }
 | LPARAN; e = assrt; RPARAN { e }
-| SUB; LPARAN; e = expr_with_result; RPARAN { BinOp(get i, Sub, Num(get i, 0), e) }
-| NOT; LPARAN; e = assrt; RPARAN { BinOp(get i, Eq, e, Bool(get i, false)) }
 | DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
-| SUB; id = ID { BinOp(get i, Sub, Num(get i, 0), Id(get i, id)) }
-| NOT; id = ID { BinOp(get i, Eq, Id(get i, id), Bool(get i, false)) }
 | RESULT {Id(get i, "result")}
-| NOT; RESULT { BinOp(get i, Eq, Id(get i, "result"), Bool(get i, false)) }
+| SUB; t = term_with_result {BinOp(get i, Sub, Num(get i, 0), t) }
+| NOT; t = term_with_result { BinOp(get i, Eq, t, Bool(get i, false)) }
 | id = ID; { Id(get i, id) }
 ;
