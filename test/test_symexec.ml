@@ -274,3 +274,19 @@ let%test "Infinite loop" =
   vf "@ invariant true @
       while true do
         5"
+
+let%test "Nested loops" =
+  vf "struct num {n: int} in
+      let x := malloc(num, 0) in
+      let y := malloc(num, 0) in
+      let sum := malloc(num, 0) in
+        (@ invariant (!x.n >= 0 && !x.n <= 10) ** !sum.n >= 0 @
+        while !x.n < 10 do
+            !y.n := 0;
+          (@ invariant (!y.n >= 0 && !y.n <= !x.n) ** !sum.n >= 0 @
+          while !y.n < !x.n do
+            !sum.n := !sum.n + !y.n;
+            !y.n := !y.n + 1);
+          !x.n := !x.n + 1);
+        !sum.n;
+        @ result >= 0 @"
