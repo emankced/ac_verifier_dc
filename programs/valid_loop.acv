@@ -7,7 +7,7 @@ let sum := malloc(num, 0) in
 	    !y.n := 0;
 		(@ invariant (!y.n >= 0 && !y.n <= !x.n) ** !sum.n >= 0 @
 		while !y.n < !x.n do
-			!sum.n := !y.n + 1;
+			!sum.n := !sum.n + !y.n;
 			!y.n := !y.n + 1);
 		!x.n := !x.n + 1);
 	!sum.n;
