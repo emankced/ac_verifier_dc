@@ -645,8 +645,7 @@ let verify (expr: expression) =
   let res = Unit in
   let h = IntMap.empty in
   let k =
-    (fun (res: value) (h: heap) (env: environment) (sdef: struct_definitions) ->
-      let env = if res == Unit then env else env |> StringMap.add "result" res in
+    (fun (_res: value) (h: heap) (env: environment) (sdef: struct_definitions) ->
       env_sdef_h_collection := (env, sdef, h) :: !env_sdef_h_collection
     )
   in
