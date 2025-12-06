@@ -5,6 +5,8 @@ let n := malloc(num, 10) in
     !n.n := !n.n - 1
   );
   (if !n.n < 0 then
-    !n.n := -(!n.n)
+    !n.n := -!n.n
+  else
+    !n.n := !n.n + 1
   );
   !n.n
