@@ -1,7 +1,7 @@
 %{
 open Ast
 let i = ref 0
-let get i = let v = !i in i := v+1; v
+let get_i () = let v = !i in i := v+1; v
 %}
 
 %token <int> NUM
@@ -101,19 +101,19 @@ type_:
 ;
 
 command:
-| ASSERT; a = assrt; ASSERT { Assert(get i, a) }
-| LET; id = ID; ASSIGN; value = command; IN; body = command { Let(get i, id, value, body) }
-| IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(get i, cond, then_body, else_body) }
-| IF; cond = expr; THEN; then_body = command { Cond(get i, cond, then_body, Unit(get i)) }
-| DEREF; id = ID; DOT; field = ID; ASSIGN; e = expr { Mset(get i, Id(get i, id), field, e) }
-| MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(get i, id, l) }
-| MFREE; LPARAN; e = expr; RPARAN { Mfree(get i, e) }
-| ASSERT; INVARIANT; inv = assrt; ASSERT; WHILE; cond = expr; DO; body = command { Invariant(get i, inv, While(get i, cond, body)) }
-| WHILE; cond = expr; DO; body = command { While(get i, cond, body) }
-| FOR; id = ID; IN; LBRACKET; start = expr; TO; end_ = expr; RBRACKET; DO; body = command { For(get i, id, start, end_, body) }
+| ASSERT; a = assrt; ASSERT { Assert(get_i (), a) }
+| LET; id = ID; ASSIGN; value = command; IN; body = command { Let(get_i (), id, value, body) }
+| IF; cond = expr; THEN; then_body = command; ELSE; else_body = command { Cond(get_i (), cond, then_body, else_body) }
+| IF; cond = expr; THEN; then_body = command { Cond(get_i (), cond, then_body, Unit(get_i ())) }
+| DEREF; id = ID; DOT; field = ID; ASSIGN; e = expr { Mset(get_i (), Id(get_i (), id), field, e) }
+| MALLOC; LPARAN; id = ID; COMMA; l = expr_list; RPARAN { Malloc(get_i (), id, l) }
+| MFREE; LPARAN; e = expr; RPARAN { Mfree(get_i (), e) }
+| ASSERT; INVARIANT; inv = assrt; ASSERT; WHILE; cond = expr; DO; body = command { Invariant(get_i (), inv, While(get_i (), cond, body)) }
+| WHILE; cond = expr; DO; body = command { While(get_i (), cond, body) }
+| FOR; id = ID; IN; LBRACKET; start = expr; TO; end_ = expr; RBRACKET; DO; body = command { For(get_i (), id, start, end_, body) }
 | LPARAN; c = command; RPARAN { c }
-| STRUCT; id = ID; LBRACE; types = type_list; RBRACE; IN; body = command { Struct(get i, id, types, body) }
-| c0 = command; SEMICOLON; c1 = command { Seq(get i, c0, c1) }
+| STRUCT; id = ID; LBRACE; types = type_list; RBRACE; IN; body = command { Struct(get_i (), id, types, body) }
+| c0 = command; SEMICOLON; c1 = command { Seq(get_i (), c0, c1) }
 | e = expr { e }
 ;
 
@@ -124,64 +124,64 @@ expr_list:
 
 expr:
 | t = term { t }
-| lhs = expr; ADD; rhs = expr { BinOp(get i, Add, lhs, rhs) }
-| lhs = expr; SUB; rhs = expr { BinOp(get i, Sub, lhs, rhs) }
-| lhs = expr; MUL; rhs = expr { BinOp(get i, Mul, lhs, rhs) }
-| lhs = expr; DIV; rhs = expr { BinOp(get i, Div, lhs, rhs) }
-| lhs = expr; EQ; rhs = expr { BinOp(get i, Eq, lhs, rhs) }
-| lhs = expr; NE; rhs = expr { BinOp(get i, Ne, lhs, rhs) }
-| lhs = expr; LE; rhs = expr { BinOp(get i, Le, lhs, rhs) }
-| lhs = expr; LT; rhs = expr { BinOp(get i, Lt, lhs, rhs) }
-| lhs = expr; GE; rhs = expr { BinOp(get i, Ge, lhs, rhs) }
-| lhs = expr; GT; rhs = expr { BinOp(get i, Gt, lhs, rhs) }
-| lhs = expr; AND; rhs = expr { BinOp(get i, And, lhs, rhs) }
-| lhs = expr; OR; rhs = expr { BinOp(get i, Or, lhs, rhs) }
+| lhs = expr; ADD; rhs = expr { BinOp(get_i (), Add, lhs, rhs) }
+| lhs = expr; SUB; rhs = expr { BinOp(get_i (), Sub, lhs, rhs) }
+| lhs = expr; MUL; rhs = expr { BinOp(get_i (), Mul, lhs, rhs) }
+| lhs = expr; DIV; rhs = expr { BinOp(get_i (), Div, lhs, rhs) }
+| lhs = expr; EQ; rhs = expr { BinOp(get_i (), Eq, lhs, rhs) }
+| lhs = expr; NE; rhs = expr { BinOp(get_i (), Ne, lhs, rhs) }
+| lhs = expr; LE; rhs = expr { BinOp(get_i (), Le, lhs, rhs) }
+| lhs = expr; LT; rhs = expr { BinOp(get_i (), Lt, lhs, rhs) }
+| lhs = expr; GE; rhs = expr { BinOp(get_i (), Ge, lhs, rhs) }
+| lhs = expr; GT; rhs = expr { BinOp(get_i (), Gt, lhs, rhs) }
+| lhs = expr; AND; rhs = expr { BinOp(get_i (), And, lhs, rhs) }
+| lhs = expr; OR; rhs = expr { BinOp(get_i (), Or, lhs, rhs) }
 ;
 
 term:
-| n = NUM { Num(get i, n) }
-| TRUE { Bool(get i, true) }
-| FALSE { Bool(get i, false) }
+| n = NUM { Num(get_i (), n) }
+| TRUE { Bool(get_i (), true) }
+| FALSE { Bool(get_i (), false) }
 | LPARAN; e = expr; RPARAN { e }
-| DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
-| SUB; t = term {BinOp(get i, Sub, Num(get i, 0), t) }
-| NOT; t = term { BinOp(get i, Eq, t, Bool(get i, false)) }
-| id = ID; { Id(get i, id) }
+| DEREF; id = ID; DOT; field = ID { Mget(get_i (), Id(get_i (), id), field) }
+| SUB; t = term {BinOp(get_i (), Sub, Num(get_i (), 0), t) }
+| NOT; t = term { BinOp(get_i (), Eq, t, Bool(get_i (), false)) }
+| id = ID; { Id(get_i (), id) }
 ;
 
 assrt:
 | e = expr_with_result { e }
-| lhs = assrt; SEP; rhs = assrt { BinOp(get i, Sep, lhs, rhs) }
-(*| lhs = assrt; SEPIMP; rhs = assrt { BinOp(get i, SepImp, lhs, rhs) }*)
-(*| lhs = assrt; POINTSTO; rhs = assrt { BinOp(get i, PointsTo, lhs, rhs) }*)
+| lhs = assrt; SEP; rhs = assrt { BinOp(get_i (), Sep, lhs, rhs) }
+(*| lhs = assrt; SEPIMP; rhs = assrt { BinOp(get_i (), SepImp, lhs, rhs) }*)
+(*| lhs = assrt; POINTSTO; rhs = assrt { BinOp(get_i (), PointsTo, lhs, rhs) }*)
 | LPARAN; e = assrt; RPARAN { e }
 (* TODO: predicates, forall, (exists,) always *)
 ;
 
 expr_with_result:
 | t = term_with_result { t }
-| lhs = expr_with_result; ADD; rhs = expr_with_result { BinOp(get i, Add, lhs, rhs) }
-| lhs = expr_with_result; SUB; rhs = expr_with_result { BinOp(get i, Sub, lhs, rhs) }
-| lhs = expr_with_result; MUL; rhs = expr_with_result { BinOp(get i, Mul, lhs, rhs) }
-| lhs = expr_with_result; DIV; rhs = expr_with_result { BinOp(get i, Div, lhs, rhs) }
-| lhs = expr_with_result; EQ; rhs = expr_with_result { BinOp(get i, Eq, lhs, rhs) }
-| lhs = expr_with_result; NE; rhs = expr_with_result { BinOp(get i, Ne, lhs, rhs) }
-| lhs = expr_with_result; LE; rhs = expr_with_result { BinOp(get i, Le, lhs, rhs) }
-| lhs = expr_with_result; LT; rhs = expr_with_result { BinOp(get i, Lt, lhs, rhs) }
-| lhs = expr_with_result; GE; rhs = expr_with_result { BinOp(get i, Ge, lhs, rhs) }
-| lhs = expr_with_result; GT; rhs = expr_with_result { BinOp(get i, Gt, lhs, rhs) }
-| lhs = expr_with_result; AND; rhs = expr_with_result { BinOp(get i, And, lhs, rhs) }
-| lhs = expr_with_result; OR; rhs = expr_with_result { BinOp(get i, Or, lhs, rhs) }
+| lhs = expr_with_result; ADD; rhs = expr_with_result { BinOp(get_i (), Add, lhs, rhs) }
+| lhs = expr_with_result; SUB; rhs = expr_with_result { BinOp(get_i (), Sub, lhs, rhs) }
+| lhs = expr_with_result; MUL; rhs = expr_with_result { BinOp(get_i (), Mul, lhs, rhs) }
+| lhs = expr_with_result; DIV; rhs = expr_with_result { BinOp(get_i (), Div, lhs, rhs) }
+| lhs = expr_with_result; EQ; rhs = expr_with_result { BinOp(get_i (), Eq, lhs, rhs) }
+| lhs = expr_with_result; NE; rhs = expr_with_result { BinOp(get_i (), Ne, lhs, rhs) }
+| lhs = expr_with_result; LE; rhs = expr_with_result { BinOp(get_i (), Le, lhs, rhs) }
+| lhs = expr_with_result; LT; rhs = expr_with_result { BinOp(get_i (), Lt, lhs, rhs) }
+| lhs = expr_with_result; GE; rhs = expr_with_result { BinOp(get_i (), Ge, lhs, rhs) }
+| lhs = expr_with_result; GT; rhs = expr_with_result { BinOp(get_i (), Gt, lhs, rhs) }
+| lhs = expr_with_result; AND; rhs = expr_with_result { BinOp(get_i (), And, lhs, rhs) }
+| lhs = expr_with_result; OR; rhs = expr_with_result { BinOp(get_i (), Or, lhs, rhs) }
 ;
 
 term_with_result:
-| n = NUM { Num(get i, n) }
-| TRUE { Bool(get i, true) }
-| FALSE { Bool(get i, false) }
+| n = NUM { Num(get_i (), n) }
+| TRUE { Bool(get_i (), true) }
+| FALSE { Bool(get_i (), false) }
 | LPARAN; e = assrt; RPARAN { e }
-| DEREF; id = ID; DOT; field = ID { Mget(get i, Id(get i, id), field) }
-| RESULT {Id(get i, "result")}
-| SUB; t = term_with_result {BinOp(get i, Sub, Num(get i, 0), t) }
-| NOT; t = term_with_result { BinOp(get i, Eq, t, Bool(get i, false)) }
-| id = ID; { Id(get i, id) }
+| DEREF; id = ID; DOT; field = ID { Mget(get_i (), Id(get_i (), id), field) }
+| RESULT {Id(get_i (), "result")}
+| SUB; t = term_with_result {BinOp(get_i (), Sub, Num(get_i (), 0), t) }
+| NOT; t = term_with_result { BinOp(get_i (), Eq, t, Bool(get_i (), false)) }
+| id = ID; { Id(get_i (), id) }
 ;
