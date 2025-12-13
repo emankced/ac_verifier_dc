@@ -45,14 +45,24 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
   if IntMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
   else
-    let td = sdef |> StringMap.find type_id in
+    let td =
+      (match sdef |> StringMap.find_opt type_id with
+      | Some(td) -> td
+      | None -> raise (InterpreterException ("mget cannot find structure definition \"" ^ type_id ^ "\""))
+      )
+    in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some off ->
-    let values_list = IntMap.find loc h in
-      if off < 0 || off >= List.length values_list then
-        raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
-      else
-        List.nth values_list off
+      let values_list =
+        (match IntMap.find_opt loc h with
+        | Some values_list -> values_list
+        | None -> raise (InterpreterException ("mget cannot find location on the heap: " ^ string_of_int loc))
+        )
+      in
+        if off < 0 || off >= List.length values_list then
+          raise (InterpreterException ("mget got location out of range: " ^ string_of_int loc))
+        else
+          List.nth values_list off
     | None -> raise (InterpreterException ("mget: field could not be found: " ^ field))
     )
 
@@ -77,8 +87,18 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
   if IntMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
   else
-    let values_list = IntMap.find loc h in
-    let td = sdef |> StringMap.find type_id in
+    let td =
+      (match sdef |> StringMap.find_opt type_id with
+      | Some(td) -> td
+      | None -> raise (InterpreterException ("mset cannot find structure definition \"" ^ type_id ^ "\""))
+      )
+    in
+    let values_list =
+      (match IntMap.find_opt loc h with
+      | Some values_list -> values_list
+      | None -> raise (InterpreterException ("mset cannot find location on the heap: " ^ string_of_int loc))
+      )
+    in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some off ->
       if off < 0 || off >= List.length values_list then
@@ -109,7 +129,11 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
       let (bound, h) = interp bound env sdef Unit h in
         let env = env |> StringMap.add id bound in
           interp body env sdef Unit h
-| Id(_i, id) -> (env |> StringMap.find id, h)
+| Id(_i, id) ->
+    (match env |> StringMap.find_opt id with
+    | Some v -> v, h
+    | None -> raise (InterpreterException ("Id could not be found: " ^ id))
+    )
 | Cond(_i, cond, then_body, else_body) ->
     let (cond, h) = interp cond env sdef Unit h in
       (match cond with
@@ -141,8 +165,7 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         )
 | Seq(_i, expr0, expr1) -> let (res, h) = interp expr0 env sdef res h in interp expr1 env sdef res h
 | Malloc(_i, id, exprs) ->
-    (*TODO check that the expression list matches the expected types *)
-    let _expected_types = sdef |> StringMap.find id in
+    (*TODO check that the expression list matches the expected types? *)
     let (values_list, h) =
       List.fold_right
         (fun expr (values_list, h) ->

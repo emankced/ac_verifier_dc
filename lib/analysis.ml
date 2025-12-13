@@ -65,7 +65,11 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         | (Sep, Bool, Bool) -> Bool
         | (_, lhs, rhs) -> raise (TypeCheckError ("BinOp:" ^ string_of_int i ^ " Operator and operands do not match: " ^ types_to_string lhs ^ " and " ^ types_to_string rhs))
         ) in (t, tm |> IntMap.add i t)
-| Id(i, id) -> let t = env |> StringMap.find id in (t, tm |> IntMap.add i t)
+| Id(i, id) ->
+    (match env |> StringMap.find_opt id with
+    | Some(t) -> (t, tm |> IntMap.add i t)
+    | None -> raise (TypeCheckError ("Id:" ^ string_of_int i ^ " could not find id \"" ^ id ^ "\""))
+    )
 | Let(i, id, bound, body) ->
     let (bound, tm) = type_check bound env sdef tm Unit in
       let env = env |> StringMap.add id bound in
@@ -103,7 +107,12 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
       let (t, tm) = type_check body env sdef tm res in
         (t, tm |> IntMap.add i t)
 | Malloc(i, id, exprs) ->
-    let expected_types = StringMap.find id sdef in
+    let expected_types =
+      (match StringMap.find_opt id sdef with
+      | Some(t) -> t
+      | None -> raise (TypeCheckError ("Malloc:" ^ string_of_int i ^ " could not find structure definition \"" ^ id ^ "\""))
+      )
+    in
     let expected_types = List.map (fun (_f, t) -> t) expected_types in
       let (actual_types, tm) = List.fold_right (
         fun e (actual_types, tm) -> let (t, tm) = type_check e env sdef tm Unit in
@@ -140,8 +149,18 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
 | Mset(i, loc, field, expr) ->
     let (t, tm) = type_check loc env sdef tm Unit in (match t with
       | Loc(id) ->
-          let expected_types = StringMap.find id sdef in
-          let (_f, expected_type) = List.find (fun (f, _) -> String.equal f field) expected_types in
+          let expected_types =
+            (match StringMap.find_opt id sdef with
+            | Some(t) -> t
+            | None -> raise (TypeCheckError ("Mset:" ^ string_of_int i ^ " could not find structure definition \"" ^ id ^ "\""))
+            )
+          in
+          let (_f, expected_type) =
+            (match List.find_opt (fun (f, _) -> String.equal f field) expected_types with
+            | Some(t) -> t
+            | None -> raise (TypeCheckError ("Mset:" ^ string_of_int i ^ " could not find field \"" ^ field ^ "\""))
+            )
+          in
           let (actual_type, tm) = type_check expr env sdef tm Unit in
             if (match (expected_type, actual_type) with
             | (Loc(idl), Loc(idr)) -> String.equal idl idr
@@ -156,8 +175,18 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
 | Mget(i, loc, field) ->
     let (t, tm) = type_check loc env sdef tm Unit in (match t with
       | Loc(id) ->
-          let expected_types = StringMap.find id sdef in
-          let (_f, t) = List.find (fun (f, _) -> String.equal f field) expected_types in
+          let expected_types =
+            (match StringMap.find_opt id sdef with
+            | Some(t) -> t
+            | None -> raise (TypeCheckError ("Mget:" ^ string_of_int i ^ " could not find structure definition \"" ^ id ^ "\""))
+            )
+          in
+          let (_f, t) =
+            (match List.find_opt (fun (f, _) -> String.equal f field) expected_types with
+            | Some(t) -> t
+            | None -> raise (TypeCheckError ("Mget:" ^ string_of_int i ^ " could not find field \"" ^ field ^ "\""))
+            )
+          in
               (t, tm |> IntMap.add i t)
       | _ -> raise (TypeCheckError ("Mget:" ^ string_of_int i ^ " requires a location, but got: " ^ types_to_string t))
       )
