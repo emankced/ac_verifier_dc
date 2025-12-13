@@ -1,8 +1,18 @@
 {
 open Parser
+open Lexing
+
+let next_line lexbuf =
+  let pos = lexbuf.lex_curr_p in
+    lexbuf.lex_curr_p <-
+    {
+      pos with pos_bol = lexbuf.lex_curr_pos;
+               pos_lnum = pos.pos_lnum + 1
+    }
 }
 
-let white = [' ' '\t' '\n']
+let white = [' ' '\t']+
+let newline = '\r' | '\n' | "\r\n"
 let num = ['0'-'9']+
 let id = ['a'-'z' 'A'-'Z']['a'-'z' 'A'-'Z' '0'-'9' '_']*
 
@@ -10,6 +20,7 @@ rule read =
   parse
   | white { read lexbuf }
   | num { NUM (int_of_string (Lexing.lexeme lexbuf))}
+  | newline { next_line lexbuf; read lexbuf }
   | "true" { TRUE }
   | "false" { FALSE }
   | "**" { SEP }
