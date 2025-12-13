@@ -442,6 +442,10 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         k_check_inv res h env sdef;
         cond_true ();
         cond_false ()
+| While(i, _, _) ->
+    print_endline ("Warning! While:" ^ string_of_int i ^ " does not have an invariant. Assuming invariant = true.");
+    let expr = Invariant(-1, Bool(-2, true), expr) in
+      symexec expr env sdef res h k
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
 and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): StringSet.t IntMap.t = match a with
