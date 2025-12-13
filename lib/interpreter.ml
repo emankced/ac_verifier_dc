@@ -165,7 +165,6 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
         )
 | Seq(_i, expr0, expr1) -> let (res, h) = interp expr0 env sdef res h in interp expr1 env sdef res h
 | Malloc(_i, id, exprs) ->
-    (*TODO check that the expression list matches the expected types? *)
     let (values_list, h) =
       List.fold_right
         (fun expr (values_list, h) ->

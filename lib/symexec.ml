@@ -129,11 +129,26 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
   if IntMap.is_empty h then
     raise (SymbolicExecutionException "mget cannot get anything from an empty heap!")
   else
-    let td = sdef |> StringMap.find type_id in
+    let td =
+      (match sdef |> StringMap.find_opt type_id with
+      | Some td -> td
+      | None -> raise (SymbolicExecutionException ("mget could not find a structure definition for \"" ^ type_id ^ "\""))
+      )
+    in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some _ ->
-      let struct_data = IntMap.find loc h in
-      let field_history = StringMap.find field struct_data in
+      let struct_data =
+        (match IntMap.find_opt loc h with
+        | Some struct_data -> struct_data
+        | None -> raise (SymbolicExecutionException ("mget could not find heap location: " ^ string_of_int loc))
+        )
+      in
+      let field_history =
+        (match StringMap.find_opt field struct_data with
+        | Some field_history -> field_history
+        | None -> raise (SymbolicExecutionException ("mget could not find field \"" ^ field ^ "\" of location: " ^ string_of_int loc))
+        )
+      in
       let (v, _assigned_by_command) = List.hd field_history in
         v
     | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
@@ -153,7 +168,17 @@ let rec pin_heap_version (form: formula) (h: heap) (assigned_by_command: bool) :
     if version != -1 then
       form
     else
-      let field_history = h |> IntMap.find loc |> StringMap.find field in
+      let field_history =
+        (match
+          (match h |> IntMap.find_opt loc with
+          | Some data -> data
+          | None -> raise (SymbolicExecutionException ("pin_heap_version could not find location: " ^ string_of_int loc))
+          ) |> StringMap.find_opt field
+        with
+        | Some field_history -> field_history
+        | None -> raise (SymbolicExecutionException ("pin_heap_version could not find at \"" ^ field ^ "\" of location: " ^ string_of_int loc))
+        )
+      in
       let history_length = List.length field_history in
       let version = if assigned_by_command then history_length - 1 else history_length in
         Mget(loc, field, struct_name, version)
@@ -182,11 +207,26 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
       | _ -> v
       )
     in
-    let td = sdef |> StringMap.find type_id in
+    let td =
+      (match sdef |> StringMap.find_opt type_id with
+      | Some td -> td
+      | None -> raise (SymbolicExecutionException ("mset could not find structure definition: " ^ type_id))
+      )
+    in
     (match List.find_index (fun (tid, _) -> String.equal tid field) td with
     | Some _ ->
-      let struct_data = h |> IntMap.find loc in
-      let field_history = struct_data |> StringMap.find field in
+      let struct_data =
+        (match h |> IntMap.find_opt loc with
+        | Some struct_data -> struct_data
+        | None -> raise (SymbolicExecutionException ("mset could not find location: " ^ string_of_int loc))
+        )
+      in
+      let field_history =
+        (match struct_data |> StringMap.find_opt field with
+        | Some field_history -> field_history
+        | None -> raise (SymbolicExecutionException ("mset could not find field \"" ^ field ^ "\" of location: " ^ string_of_int loc))
+        )
+      in
       let field_history = (v, assigned_by_command) :: field_history in
       let struct_data = struct_data |> StringMap.add field field_history in
         h |> IntMap.add loc struct_data
@@ -221,8 +261,18 @@ let sort_of_formula (formula: formula) (sdef: struct_definitions): Z3.Sort.sort 
 | BinOp(Div, _, _) -> int_sort
 | BinOp(_) -> bool_sort
 | Mget(_loc, field, struct_name, _version) ->
-    let struct_definitions = sdef |> StringMap.find struct_name in
-    let (_field, expected_type) = struct_definitions |> List.find (fun (f, _) -> String.equal field f) in
+    let struct_definitions =
+      (match sdef |> StringMap.find_opt struct_name with
+      | Some struct_definitions -> struct_definitions
+      | None -> raise (SymbolicExecutionException ("sort_of_formula could not find structure definition of: " ^ struct_name))
+      )
+    in
+    let expected_type =
+      (match struct_definitions |> List.find_opt (fun (f, _) -> String.equal field f) with
+      | Some (_field, expected_type) -> expected_type
+      | None -> raise (SymbolicExecutionException ("sort_of_formula could not find field \"" ^ field ^ "\" in struct definitions of " ^ struct_name))
+      )
+    in
       (match expected_type with
       | NumT -> int_sort
       | BoolT -> bool_sort
@@ -242,12 +292,13 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
 | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, StringMap.empty
 | Bool(b) -> Z3.Boolean.mk_val ctx b, StringMap.empty
 | Id(id) ->
-    let sort = (match env |> StringMap.find id with
-      | Num(_)
-      | Loc(_) -> int_sort
-      | Bool(_) -> bool_sort
-      | Formula(form) -> sort_of_formula form sdef
-      | Unit -> raise (SymbolicExecutionException "formula_to_Z3 cannot get sort of Unit...")
+    let sort = (match env |> StringMap.find_opt id with
+      | Some Num(_)
+      | Some Loc(_) -> int_sort
+      | Some Bool(_) -> bool_sort
+      | Some Formula(form) -> sort_of_formula form sdef
+      | Some Unit -> raise (SymbolicExecutionException "formula_to_Z3 cannot get sort of Unit...")
+      | None -> raise (SymbolicExecutionException ("formula_to_Z3 could not find id: " ^ id))
       )
     in
     let sym = string_symbol id in
@@ -256,14 +307,34 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
 | Mget(loc, field, struct_name, version) ->
     let version =
       if version == -1 then
-        let field_history = (h |> IntMap.find loc) |> StringMap.find field in
+        let field_history =
+          (match
+            (match h |> IntMap.find_opt loc with
+            | Some data -> data
+            | None -> raise (SymbolicExecutionException ("formula_to_z3 could not find location: " ^ string_of_int loc))
+            ) |> StringMap.find_opt field
+          with
+          | Some field_history -> field_history
+          | None ->raise (SymbolicExecutionException ("formula_to_z3 could not find field \"" ^ field ^ "\" of location: " ^ string_of_int loc))
+          )
+        in
         let total_versions = List.length field_history in
           total_versions - 1
       else
         version
     in
-    let struct_info = sdef |> StringMap.find struct_name in
-    let (_name, expected_type) = List.find (fun (name, _expected_type) -> String.equal name field) struct_info in
+    let struct_info =
+      (match sdef |> StringMap.find_opt struct_name with
+      | Some struct_info -> struct_info
+      | None -> raise (SymbolicExecutionException ("formula_to_z3 could not find structure definition: " ^ struct_name))
+      )
+    in
+    let expected_type =
+      (match List.find_opt (fun (name, _expected_type) -> String.equal name field) struct_info with
+      | Some (_name, expected_type) -> expected_type
+      | None -> raise (SymbolicExecutionException ("formula_to_z3 could not find expected type for field \"" ^ field ^ "\" in struct definition: " ^ struct_name))
+      )
+    in
     let id = (string_of_int loc ^ "." ^ field ^ ":" ^ string_of_int version) in
     let sym = string_symbol id in
       (match expected_type with
@@ -331,7 +402,11 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
         )
       in
         symexec bound env sdef Unit h k
-| Id(_i, id) -> k (env |> StringMap.find id) h env sdef
+| Id(_i, id) ->
+  (match env |> StringMap.find_opt id with
+  | Some res -> k res h env sdef
+  | None -> raise (SymbolicExecutionException ("Id could not find id: " ^ id))
+  )
 | BinOp(_i, op, lhs, rhs) ->
     let k = (fun (res_lhs: value) (h: heap) _ _ ->
         let k = (fun (res_rhs: value) (h: heap) ->
@@ -446,8 +521,12 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       let sdef = sdef |> StringMap.add id fields in
         symexec body env sdef Unit h k
 | Malloc(_i, id, exprs) ->
-    (*TODO check that the expression list matches the expected types *)
-    let expected_types = sdef |> StringMap.find id in
+    let expected_types =
+      (match sdef |> StringMap.find_opt id with
+      | Some expected_types -> expected_types
+      | None -> raise (SymbolicExecutionException ("Malloc could not find structure definition: " ^ id))
+      )
+    in
     let field_exprs = List.combine expected_types exprs in
     let (values_list, h) =
       List.fold_right
