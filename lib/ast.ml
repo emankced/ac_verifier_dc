@@ -1,4 +1,4 @@
-(** Binary operators *)
+(** [binop] defines all binary operators. *)
 type binop =
 | Add
 | Sub
@@ -16,13 +16,13 @@ type binop =
 | SepImp
 | PointsTo
 
-(** Types used creating a struct *)
+(** [struct_type] differentiates beteween number type and bool type. It is used for creating a struct. *)
 type struct_type =
 | NumT
 | BoolT
 (*| LocStruct of string*)
 
-(** Expressions as AST *)
+(** [expression] defines all expressions as AST nodes. It is the central representation of an AC program. *)
 type expression =
 | Num of int * int
 | Bool of int * bool
