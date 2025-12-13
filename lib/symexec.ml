@@ -2,33 +2,63 @@ open Ast
 (*open Analysis*)
 open Common
 
+(** Z3 context *)
 let ctx = Z3.mk_context [("proof", "true")]
 
+(**
+[int_symbol index] creates a Z3 symbol with id [index]
+@param index id for Z3 symbol
+@returns Z3 symbol
+*)
 let int_symbol index = Z3.Symbol.mk_int ctx index
+
+(**
+[string_symbol name] creates a Z3 symbol with id [name]
+@param name id for Z3 symbol
+@returns Z3 symbol
+*)
 let string_symbol name = Z3.Symbol.mk_string ctx name
 
+(** Z3 int sort *)
 let int_sort = Z3.Arithmetic.Integer.mk_sort ctx
+
+(** Z3 bool sort *)
 let bool_sort = Z3.Boolean.mk_sort ctx
 
+(** Z3 context used for building formulae and solving formulae *)
 let solver = Z3.Solver.mk_simple_solver ctx
 
+(** Exception for errors during symbolic execution passing a message *)
 exception SymbolicExecutionException of string
 
+(** Exception for reporting a formula is not satisfiable *)
 exception Unsatisfiable of string
+
+(** Exception for reporting a formula is not solvable *)
 exception Unknown of string
 
+(** Execption for separation violation passing location and field name *)
 exception SeparationViolated of int * string
 
-let solve formula = match Z3.Solver.check solver formula with
+(**
+[solve formula] checks the conjunct list of formulae [formula] for satisfiability with Z3.
+@param formula list of conunct Z3 expressions
+@raise Unsatisfiable if Z3 reported unsatisfiable
+@raise Unknown if Z3 reported unknown
+*)
+let solve (formula: Z3.Expr.expr list): unit = match Z3.Solver.check solver formula with
 | SATISFIABLE -> ()
 | UNSATISFIABLE -> raise (Unsatisfiable ("Solver returned UNSATISFIABLE! formula:\n" ^ Z3.Expr.to_string (if List.length formula == 1 then List.hd formula else Z3.Boolean.mk_and ctx formula)))
 | UNKNOWN -> raise (Unknown ("Solver returned UNKNOWN! formula:\n" ^ Z3.Expr.to_string (if List.length formula == 1 then List.hd formula else Z3.Boolean.mk_and ctx formula)))
 
+(** Interpretation values used in the symbolic execution
+Note: [Mget] holds location, field, struct name, version
+*)
 type formula =
 | Num of int
 | Bool of bool
 | Id of string
-| Mget of int * string * string * int (* location, field, struct name, version*)
+| Mget of int * string * string * int
 | BinOp of binop * formula * formula
 
 (** Interpretation values used in the symbolic execution *)
@@ -45,13 +75,21 @@ type environment = (value StringMap.t)
 (** Map that holds the struct definitions *)
 type struct_definitions = ((string * struct_type) list StringMap.t)
 
-(** Map that holds the heap store *)
+(** Map that holds the heap store. The heap is versioned, therefore, every field has a list of previous values and the latest value is at index 0.
+Every value has a flag, which must be true if the value was assigned by the assign command. For an assumption the flag must be false.
+This information is needed for correct premise generation.
+*)
 type heap = ((((value * bool) list) StringMap.t) IntMap.t) (* value and flag, which is true if the value was assigned by the assign command. For an assumption the flag would be false. *)
 
 (** List of all environments, struct definitions and heaps at the end of the symbolic execution. This is used by the postcondition generator. *)
 let env_sdef_h_collection: (environment * struct_definitions * heap) list ref = ref []
 
-(** Memory allocation on the heap *)
+(**
+[malloc init_values h] allocates a structure on heap [h]
+@param init_values initial values for a struct
+@param h heap to modify
+@returns location and modified heap [h]
+*)
 let malloc (init_values: value StringMap.t) (h: heap) : int * heap =
   if StringMap.cardinal init_values == 0 then
     raise (SymbolicExecutionException "malloc cannot allocate nothing")
@@ -68,10 +106,25 @@ let malloc (init_values: value StringMap.t) (h: heap) : int * heap =
     in
       (max_available_loc, h |> IntMap.add max_available_loc init_values)
 
-(** Memory deallocation on the heap *)
+(**
+[mfree loc h] deallocates location [loc] from heap [h]
+@param loc location on the heap
+@param h heap to modify
+@returns modified heap [h]
+*)
 let mfree (loc: int) (h: heap) : heap = h |> IntMap.remove loc
 
-(** Memory featching from the heap *)
+(**
+[mget loc field type_id h heap sdef] fetches a value from location [loc] with field [field] on the heap [h].
+The heap is versioned, therefore, [mget] fetches the latest version from a field.
+@param loc location on the heap
+@param field name of field that is set
+@param type_id structure name
+@param h current heap
+@param sdef structure definitions
+@returns latest value from heap location [loc] in field [field]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : value =
   if IntMap.is_empty h then
     raise (SymbolicExecutionException "mget cannot get anything from an empty heap!")
@@ -86,6 +139,14 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
     | None -> raise (SymbolicExecutionException ("mget: field could not be found: " ^ field))
     )
 
+(**
+[pin_heap_version form h] pins current heap version in the formula [form].
+This is a helper function for mset, to be sure a formula references the current heap, but can still be used later without conflicts
+@param form formula to pin derefs
+@param h current heap
+@param assigned_by_command should be set to [true] for values set by commands and [false] for values derived from assumptions
+@returns mutated formula [form]
+*)
 let rec pin_heap_version (form: formula) (h: heap) (assigned_by_command: bool) : formula = match form with
 | BinOp(op, lhs, rhs) -> BinOp(op, pin_heap_version lhs h assigned_by_command, pin_heap_version rhs h assigned_by_command)
 | Mget(loc, field, struct_name, version) ->
@@ -98,7 +159,19 @@ let rec pin_heap_version (form: formula) (h: heap) (assigned_by_command: bool) :
         Mget(loc, field, struct_name, version)
 | _ -> form
 
-(** Memory mutation on the heap *)
+(**
+[mset loc field type_id v h heap sdef assigned_by_command] mutates location [loc] on the heap [h] by setting adding the value [v] to the field [field].
+The heap is versioned, therefore, [mset] does not replace values but only adds to the field history.
+@param loc location on the heap
+@param field name of field of the structure
+@param type_id structure name
+@param v value to set
+@param h heap to modify
+@param sdef structure definitions
+@param assigned_by_command should be set to [true] for values set by commands and [false] for values derived from assumptions
+@returns mutated heap [h]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) (assigned_by_command: bool) : heap =
   if IntMap.is_empty h then
     raise (SymbolicExecutionException "mset cannot set anything on an empty heap!")
@@ -120,12 +193,25 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     | None -> raise (SymbolicExecutionException ("mset: field could not be found: " ^ field))
     )
 
-let value_to_formula (value: value) (_env: environment) (_sdef: struct_definitions) (_h: heap) : formula = match value with
+(**
+[value_to_formula value] generates formula from [value].
+@param value value to convert
+@returns formula from [value]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
+let value_to_formula (value: value): formula = match value with
 | Num(n) -> Num(n)
 | Bool(b) -> Bool(b)
 | Formula(form) -> form
 | _ -> raise (SymbolicExecutionException "value_to_formula does not support all values")
 
+(**
+[sort_of_formula formula sdef] generates Z3 sort from [formula].
+@param formula formula to convert
+@param sdef structure definitions
+@returns Z3 sort from [formula]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 let sort_of_formula (formula: formula) (sdef: struct_definitions): Z3.Sort.sort = match formula with
 | Num(_) -> int_sort
 | Bool(_) -> bool_sort
@@ -143,6 +229,15 @@ let sort_of_formula (formula: formula) (sdef: struct_definitions): Z3.Sort.sort 
       )
 | _ -> raise (SymbolicExecutionException "Sort of formula may only be int or bool!")
 
+(**
+[formula_to_Z3 formula env sdef h] generates Z3 formula from [formula].
+@param formula formula to convert
+@param env environment
+@param sdef structure definitions
+@param h heap
+@returns Z3 formula from [formula] and a mapping of symbol identifiers to their Z3 constants
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr StringMap.t = match formula with
 | Num(n) -> Z3.Arithmetic.Integer.mk_numeral_i ctx n, StringMap.empty
 | Bool(b) -> Z3.Boolean.mk_val ctx b, StringMap.empty
@@ -194,9 +289,27 @@ let rec formula_to_Z3 (formula: formula) (env: environment) (sdef: struct_defini
   | _ -> raise (SymbolicExecutionException "formula_to_Z3 does not support all binops")
   )
 
+(**
+[derive expr env sdef h] generates Z3 formula from [expr].
+@param expr expression to execute
+@param env environment
+@param sdef structure definitions
+@param h heap
+@returns Z3 formula from [expr]
+*)
 let rec derive (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr =
   let formula, _constants = formula_to_Z3 (formula_of expr env sdef h) env sdef h in formula
 
+(**
+[symexec expr env sdef res h k] executes the [expr] symbolically. It uses continuation-passing-style, so that a lambda future executions can be passed with [k].
+@param expr expression to execute
+@param env environment
+@param sdef structure definitions
+@param res result of the previous command
+@param h heap
+@param k continuation
+@raise SymbolicExecutionException raises [SymbolicExecutionException] if an error is encountered
+*)
 and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) (k: value -> heap -> environment -> struct_definitions -> unit): unit = match expr with
 | Num(_i, n) -> k (Num(n)) h env sdef
 | Bool(_i, b) -> k (Bool(b)) h env sdef
@@ -241,8 +354,8 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
             | (And, Bool(lhs), Bool(rhs)) -> Bool(lhs && rhs)
             | (Or, Bool(lhs), Bool(rhs)) -> Bool(lhs || rhs)
             | (op, Formula(_lhs), Formula(_rhs)) -> Formula(BinOp(op, formula_of lhs env sdef h, formula_of rhs env sdef h)) (* get formula from lhs without symexec result *)
-            | (op, lhs, Formula(_form)) -> Formula(BinOp(op, value_to_formula lhs env sdef h, formula_of rhs env sdef h))
-            | (op, Formula(_form), rhs) -> Formula(BinOp(op, formula_of lhs env sdef h, value_to_formula rhs env sdef h))
+            | (op, lhs, Formula(_form)) -> Formula(BinOp(op, value_to_formula lhs , formula_of rhs env sdef h))
+            | (op, Formula(_form), rhs) -> Formula(BinOp(op, formula_of lhs env sdef h, value_to_formula rhs))
             | _ -> raise (SymbolicExecutionException "Unsupported binary operation!")
             )
           in
@@ -287,7 +400,6 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     (try solve [premise; derived_cond]; true with
     | Unsatisfiable(_) -> false
     | Unknown(_) ->
-        (*TODO abstract with cond*)
         raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
     )
   in
@@ -295,7 +407,6 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
     (try solve [premise; Z3.Boolean.mk_not ctx derived_cond]; true with
     | Unsatisfiable(_) -> false
     | Unknown(_) ->
-        (*TODO abstract with cond*)
         raise (SymbolicExecutionException "TODO: Cond unknown is not supported yet")
     )
   in
@@ -448,6 +559,16 @@ and symexec (expr: expression) (env: environment) (sdef: struct_definitions) (re
       symexec expr env sdef res h k
 | _ -> raise (SymbolicExecutionException ("symexec does not support this AST node (yet?): " ^ string_of_expression expr))
 
+(**
+[check_separation a env sdef h] checks whether all dereferenced locations + fields do not violate the separating conjunction.
+@param a assertion formula as expression
+@param env environment
+@param sdef structure definitions
+@param h current heap
+@returns a mapping of locations and fields dereferenced inside [a]
+@raise SeparationViolated raises [SeparationViolated] if a separaition violation is detected
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 and check_separation (a: expression) (env: environment) (sdef: struct_definitions) (h: heap): StringSet.t IntMap.t = match a with
 | BinOp(_, Sep, lhs, rhs) ->
     let lhs = check_separation lhs env sdef h in
@@ -488,6 +609,14 @@ and check_separation (a: expression) (env: environment) (sdef: struct_definition
       )
 | _ -> raise (SymbolicExecutionException "check_separation does not support this AST node!")
 
+(**
+[get_premise env sdef h] builds a big formula describing the current verification state. This can be used as premise for implications.
+@param env environment
+@param sdef structure definitions
+@param h current heap
+@returns premise as Z3 formula and a mapping of symbol identifiers to their Z3 constants
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Expr.expr * Z3.Expr.expr StringMap.t =
   let env_list, env_constants = StringMap.fold
     (fun id v (l, cs) ->
@@ -553,6 +682,15 @@ and get_premise (env: environment) (sdef: struct_definitions) (h: heap) : Z3.Exp
   let constants = env_constants |> StringMap.union (fun _id a _b -> Some(a)) h_constants in
     Z3.Boolean.mk_and ctx (List.append env_list h_list), constants
 
+(**
+[find_derefs expr env sdef h] finds all derefs in the expression [expr]
+@param expr expression to be analyzed
+@param env environment
+@param sdef structure definitions
+@param h current heap
+@returns mapping of locations and fields, which have been dereferenced in [expr]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 and find_derefs (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : (string * StringSet.t) IntMap.t =
   (match expr with
   | BinOp(_, _op, lhs, rhs) -> IntMap.union (fun _l (t, lhs) (_t, rhs) -> Some(t, StringSet.union lhs rhs)) (find_derefs lhs env sdef h) (find_derefs rhs env sdef h)
@@ -572,6 +710,17 @@ and find_derefs (expr: expression) (env: environment) (sdef: struct_definitions)
   | _ -> IntMap.empty
   )
 
+(**
+[contains_deref code addr field env sdef h] checks whether [code] contains a deref to location [addr] with field [field]
+@param code expression to be analyzed
+@param addr location
+@param field field name
+@param env environment
+@param sdef structure definitions
+@param h current heap
+@returns [true] if address [addr] with field [field] is dereferenced. [false] otherwise.
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 and contains_deref (code: expression) (addr: int) (field: string) (env: environment) (sdef: struct_definitions) (h: heap) : bool =
   (match code with
   | Mget(_, loc, field_) ->
@@ -594,6 +743,18 @@ and contains_deref (code: expression) (addr: int) (field: string) (env: environm
   | _ -> false
   )
 
+(**
+[formulae_of_deref code addr struct_name field env sdef h] gathers formulae of derefs to location [addr] with field [field] in expression [code]
+@param code expression to be analyzed
+@param addr location
+@param struct_name structure name
+@param field field name
+@param env environment
+@param sdef structure definitions
+@param h current heap
+@returns list of formulae describing how [addr].[field] behaves
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 and formulae_of_deref (code: expression) (addr: int) (struct_name: string) (field: string) (env: environment) (sdef: struct_definitions) (h: heap) : formula list =
   (match code with
   | BinOp(_, And, lhs, rhs) -> (*TODO does Or has to be specially handled as well? *)
@@ -609,7 +770,17 @@ and formulae_of_deref (code: expression) (addr: int) (struct_name: string) (fiel
   | x -> [formula_of x env sdef h]
   )
 
-and update_h h assumption derefs_map (env: environment) (sdef: struct_definitions) : heap = IntMap.fold
+(**
+[update_h h assumption derefs_map env sdef] mutates heap [h], so that the assumption [assumption] is applied to the heap.
+@param h heap to modify
+@param assumption assumption as expression
+@param derefs_map mapping of locations to their struct name and dereferenced fields
+@param env environment
+@param sdef structure definitions
+@returns mutated heap [h]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
+and update_h (h: heap) (assumption: expression) (derefs_map: (string * StringSet.t) IntMap.t) (env: environment) (sdef: struct_definitions) : heap = IntMap.fold
     (fun addr (struct_name, fields) h ->
       StringSet.fold
         (fun field h ->
@@ -628,6 +799,15 @@ and update_h h assumption derefs_map (env: environment) (sdef: struct_definition
   derefs_map
   h
 
+(**
+[formula_of expr env sdef h] derives a formula from the expression [expr]
+@param expr expression that is converted to a formula
+@param env environment
+@param sdef structure definitions
+@param h current heap
+@returns mutated heap [h]
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
 and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) (h: heap) : formula  = match expr with
 | Num(_, n) -> Num(n)
 | Bool(_, b) -> Bool(b)
@@ -643,7 +823,12 @@ and formula_of (expr: expression) (env: environment) (sdef: struct_definitions) 
 | Id(_, id) -> Id(id)
 | _ -> raise (SymbolicExecutionException "formula_of does not support all AST nodes")
 
-let verify (expr: expression) =
+(**
+[verify expr] starts the verification process and initializes the symbolic execution
+@param expr program to be verified
+@raise SymbolicExecutionException may raise [SymbolicExecutionException]
+*)
+let verify (expr: expression): unit =
   let env = StringMap.empty in
   let sdef = StringMap.empty in
   let res = Unit in
@@ -655,6 +840,10 @@ let verify (expr: expression) =
   in
     symexec expr env sdef res h k
 
+(**
+[generate_postcondition ()] combines all final proof states to build a postcondition in SMT-LIB format.
+@returns string containing the over-approximating postcondition
+*)
 let generate_postcondition (_: unit) : string =
   let premises =
     List.map
@@ -664,6 +853,10 @@ let generate_postcondition (_: unit) : string =
   let postcondition = Z3.Boolean.mk_or ctx premises in
     Z3.Expr.to_string postcondition
 
+(**
+[get_locations_missing_symbol_definition ()] gathers all locations of the final proof states missing a definition
+@returns the set of missing locations
+*)
 let get_locations_missing_symbol_definition (_: unit): IntSet.t =
   let rec check_missing_in_formula (form: formula) (h: heap) : IntSet.t =
     match form with
