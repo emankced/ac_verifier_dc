@@ -1,6 +1,12 @@
 open Ast
 
-(** Returns static single assignment form, so every identifier is unique for its declaration *)
+(**
+[ssa expr id_to_replace id_replacement] generates the static single assignment form of [expr], so every identifier is unique for its declaration
+@param expr expression to transform
+@param id_to_replace id to replace
+@param id_replacement id that is used to replace [id_to_replace]
+@returns AST in static single assignment form
+*)
 let rec ssa (expr: expression) (id_to_replace: string) (id_replacement: string): expression = match expr with
 | Id(i, id) -> Id(i, if String.equal id id_to_replace then id_replacement else id)
 | Let(i, id, bound, body) ->
