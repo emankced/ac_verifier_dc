@@ -44,11 +44,21 @@ type expression =
 (* functions *)
 (* recursive let *)
 
+(**
+[string_of_struct_type t] maps a struct type to a string
+@param t structure type
+@returns string for the structure type [t]
+*)
 let string_of_struct_type (t: struct_type) : string = match t with
 | NumT -> "Num"
 | BoolT -> "Bool"
 (*| LocStruct(id) -> "LocStruct(" ^ id ^ ")"*)
 
+(**
+[string_of_expression expr] builds a string for the expression [expr]
+@param expr expression
+@returns string of expression [expr]
+*)
 let rec string_of_expression (expr: expression) : string = match expr with
 | Num(i, n) -> "Num:" ^ string_of_int i ^ "(" ^ string_of_int n ^ ")"
 | Bool(i, b) -> "Bool:" ^ string_of_int i ^ "(" ^ (if b then "true" else "false") ^ ")"
@@ -89,7 +99,11 @@ let rec string_of_expression (expr: expression) : string = match expr with
 | Assert(i, assertion) -> "Assert:" ^ string_of_int i ^ "(" ^ string_of_expression assertion ^ ")"
 | Invariant(i, inv, loop) -> "Invariant:" ^ string_of_int i ^ "(" ^ string_of_expression inv ^ "," ^ string_of_expression loop ^ ")"
 
-(** returns the int of an ast expression *)
+(**
+[get_ast_id expr] returns the AST id of expression [expr]
+@param expr expression
+@returns id of AST node [expr]
+*)
 let get_ast_id (expr: expression) : int = match expr with
 | Num(i, _) -> i
 | Bool(i, _) -> i

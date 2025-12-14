@@ -7,8 +7,7 @@ open Dc.Common
 let vf (src: string): bool =
   let prog = parse src in
   let prog = ssa prog "" "" in
-  let (_, tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty Unit in
-    type_map := tm;
+  let (_, _tm) = type_check prog StringMap.empty StringMap.empty IntMap.empty Unit in
     try (let _ = verify prog in true) with
     | _ -> false
 

@@ -1,6 +1,7 @@
 open Ast
 open Common
 
+(** type representation that the type checker uses *)
 type types =
 | Null
 | Loc of string
@@ -9,20 +10,23 @@ type types =
 | Unit
 | Unknown
 
-(** Map that holds the environment store *)
+(** [type_environment] maps an identifier to an analyzed type *)
 type type_environment = (types StringMap.t)
 
-(** Map that holds the struct definitions *)
+(** [struct_type_definitions] maps a structure name to a list of field names and their types *)
 type struct_type_definitions = ((string * types) list StringMap.t)
 
-(** Map that holds type information of all AST nodes *)
+(** [ast_types] maps AST ids to the type the AST node returns *)
 type ast_types = (types IntMap.t)
 
 (** Exception used by the type checker *)
 exception TypeCheckError of string
 
-let type_map: ast_types ref = ref IntMap.empty
-
+(**
+[types_to_string t] returns a string describing type [t]
+@param t type to convert
+@returns string of type [t]
+*)
 let types_to_string (t: types) : string = match t with
 | Null -> "Null"
 | Loc(id) -> "Loc(" ^ id ^ ")"
@@ -31,6 +35,16 @@ let types_to_string (t: types) : string = match t with
 | Unit -> "Unit"
 | Unknown -> "Unknown"
 
+(**
+[type_check expr env sdef tm res] checks type correctnes of expression [expr] and builds a type map [tm], which maps AST ids to the AST node's return types
+@param expr expression to analyze
+@param env environment
+@param sdef structure definitions
+@param tm type map that maps AST ids to the return type of their AST node
+@param res previous commands type (this is needed, because assertions do not return something, but pass through the previous result)
+@returns the type of expression [expr] and the updated type map [tm]
+@raise TypeCheckError may raise [TypeCheckError]
+*)
 let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_type_definitions) (tm: ast_types) (res: types) : types * ast_types = match expr with
 | Num(i, _) -> (Num, tm |> IntMap.add i Num)
 | Bool(i, _) -> (Bool, tm |> IntMap.add i Bool)
@@ -228,7 +242,11 @@ let rec type_check (expr: Ast.expression) (env: type_environment) (sdef: struct_
         (res, tm |> IntMap.add i res)
 (*| _ -> raise (TypeCheckError "TODO: implement all cases")*)
 
-(** Collects all used bound variable names of an expression *)
+(**
+[bound_variables expr] collects all used bound variable names of the expression [expr]
+@param expr expression
+@returns set of bound identifiers
+*)
 let rec bound_variables (expr: expression): StringSet.t = match expr with
 | Num(_, _) -> StringSet.empty
 | Bool(_, _) -> StringSet.empty
