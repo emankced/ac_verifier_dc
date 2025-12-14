@@ -128,3 +128,4 @@ All commands:
 | assertion (`result` is the return value of the previous command) | `@ result >= 5 @` |
 | while loop | `while !n.n > 0 do !n.n := !n.n - 1` |
 | while loop with invariant | `@ invariant !n.n >= 0 @ while !n.n > 0 do !n.n := !n.n - 1` |
+| expression | `64 / 2` |
