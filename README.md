@@ -82,7 +82,8 @@ opam exec -- dune build @doc-private
 ```
 
 # AC Programming Language
-AC has terms, expressions, and commands. The ters are a subset of the expressions and the expressions are a subset of the commands.
+AC has terms, expressions, and commands. The terms are a subset of the expressions and the expressions are a subset of the commands.
+There are example programs in folder [`programs` folder](programs/).
 In the following all terms, expressions, and commands are listed with simple examples.
 
 All terms:
