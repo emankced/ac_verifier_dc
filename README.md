@@ -91,7 +91,7 @@ All terms:
 | integer | `42` |
 | boolean | `true` |
 | negation for boolean | `not false` |
-| negation | `-5` |
+| negation for integer | `-5` |
 | paranthesis around expression | `(1 + 2)` |
 | dereferencing field `f` | `!x.f` |
 
