@@ -1,7 +1,7 @@
 open Ast
 open Common
 
-(** Return values of the interpreter *)
+(** [value] is the type for return values of the interpreter *)
 type value =
 | Loc of int * string (* base location and type id *)
 | Num of int
@@ -9,19 +9,25 @@ type value =
 | Unit
 (* closures *)
 
-(** Map that holds the environment store *)
+(** [environment] maps identifiers to values *)
 type environment = (value StringMap.t)
 
-(** Map that holds the struct definitions *)
+(** [struct_definitions] maps structure names to a list of field names and types *)
 type struct_definitions = ((string * struct_type) list StringMap.t)
 
-(** Map that holds the heap store *)
+(** [heap] maps locations to a list holding a structure's fields *)
 type heap = ((value list) IntMap.t)
 
 (** Exception used by the interpreter *)
 exception InterpreterException of string
 
-(** Memory allocation on the heap *)
+(**
+[malloc init_values h] allocates a structure on the heap [h] and initilizes the fields with [init_values]
+@param init_values initial values for the allocated structure
+@param h heap to modify
+@returns modified heap [h]
+@raise InterpreterException may raise [InterpreterException]
+*)
 let malloc (init_values: value list) (h: heap) : int * heap =
   if List.length init_values == 0 then
     raise (InterpreterException "malloc cannot allocate nothing")
@@ -37,10 +43,24 @@ let malloc (init_values: value list) (h: heap) : int * heap =
     in
       (max_available_loc, h |> IntMap.add max_available_loc init_values)
 
-(** Memory deallocation on the heap *)
+(**
+[mfree loc h] deletes a structure from the heap [h] at location [loc]
+@param loc location of the structure
+@param h heap to modify
+@returns modified heap [h]
+*)
 let mfree (loc: int) (h: heap) : heap = h |> IntMap.remove loc
 
-(** Memory featching from the heap *)
+(**
+[mget loc field type_id h sdef] fetches the field [field] of the structure at location [loc] from the heap [h]
+@param loc location of the structure
+@param field field name
+@param type_id structure name
+@param h current heap
+@param sdef structure definitions
+@returns value of field [loc].[field]
+@raise InterpreterException may raise [InterpreterException]
+*)
 let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_definitions) : value =
   if IntMap.is_empty h then
     raise (InterpreterException "mget cannot get anything from an empty heap!")
@@ -66,7 +86,13 @@ let mget (loc: int) (field: string) (type_id: string) (h: heap) (sdef: struct_de
     | None -> raise (InterpreterException ("mget: field could not be found: " ^ field))
     )
 
-(** Replace nth element if the type matches *)
+(**
+[replace_nth l v n] replaces the [n]th value of the list [l] with value [v]
+@param l list to modify
+@param v value to insert
+@param n index to replace in [l]
+@raise InterpreterException raises [InterpreterException] if the type does not match
+*)
 let rec replace_nth (l: value list) (v: value) (n: int) : value list =
   match l with
   | [] -> []
@@ -82,7 +108,17 @@ let rec replace_nth (l: value list) (v: value) (n: int) : value list =
       else
         x :: replace_nth xs v (n-1)
 
-(** Memory mutation on the heap *)
+(**
+[mset loc field type_id v h sdef] sets the field [field] of the structure at location [loc] on the heap [h] to value [v]
+@param loc location of the structure
+@param field field name
+@param type_id structure name
+@param v value to set
+@param h heap to modify
+@param sdef structure definitions
+@returns modified heap [h]
+@raise InterpreterException may raise [InterpreterException]
+*)
 let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef: struct_definitions) : heap =
   if IntMap.is_empty h then
     raise (InterpreterException "mset cannot set anything on an empty heap!")
@@ -109,7 +145,16 @@ let mset (loc: int) (field: string) (type_id: string) (v: value) (h: heap) (sdef
     | None -> raise (InterpreterException ("mset: field could not be found: " ^ field))
     )
 
-(** Evaluates expressions based on an environment and heap *)
+(**
+[interp expr env sdef res h] interpretates the expression [expr] and returens a value and mutated heap
+@param expr expression to interpret
+@param env environment
+@param sdef structure definitions
+@param res result of the previous command (this is needed for skipping assertions without losing a result)
+@param h heap
+@returns value of interpreted [expr] and potentially modified [h]
+@raise InterpreterException may raise [InterpreterException]
+*)
 let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitions) (res: value) (h: heap) : value * heap = match expr with
 | Num(_i, n) -> (Num(n), h)
 | Bool(_i, b) -> (Bool(b), h)
@@ -224,6 +269,12 @@ let rec interp (expr: Ast.expression) (env: environment) (sdef: struct_definitio
 | Assert(_i, _assertion) -> res, h
 | Invariant(_i, _inv, body) -> interp body env sdef res h
 
+(**
+[lhs === rhs] returns whether value [lhs] is equal to [rhs]
+@param lhs a value
+@param rhs a value
+@returns [true] if [lhs] and [rhs] are equal; [false] otherwise
+*)
 let (===) (lhs: value) (rhs: value) : bool = match (lhs, rhs) with
 | (Num(lhs), Num(rhs)) -> lhs == rhs
 | (Loc(lhs, lid), Loc(rhs, rid)) -> lhs == rhs && String.equal lid rid
@@ -231,4 +282,10 @@ let (===) (lhs: value) (rhs: value) : bool = match (lhs, rhs) with
 | (Unit, Unit) -> true
 | _ -> false
 
+(**
+[lhs !== rhs] returns whether value [lhs] is not equal to [rhs]
+@param lhs a value
+@param rhs a value
+@returns [true] if [lhs] and [rhs] are not equal; [false] otherwise
+*)
 let (!==) (lhs: value) (rhs: value) : bool = not (lhs === rhs)
