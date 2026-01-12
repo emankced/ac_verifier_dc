@@ -1,14 +1,10 @@
 let
   pkgs = import <nixpkgs> {};
 in pkgs.mkShell rec {
-  #nativeInputs = with pkgs; [
-  #  ocaml
-  #  #opam
-  #];
-
   buildInputs = with pkgs; [
     ocaml
     dune_3
+    z3
     ocamlPackages.findlib
     ocamlPackages.ocaml-lsp
     ocamlPackages.odoc
